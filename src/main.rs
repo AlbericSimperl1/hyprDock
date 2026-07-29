@@ -1,11 +1,12 @@
 use gtk4::prelude::*;
 use gtk4::{
-    Application, ApplicationWindow, Box, Button, CssProvider, EventControllerMotion, GestureClick,
-    IconTheme, Orientation, Popover, Separator,
+    Application, ApplicationWindow, Box, Button, CssProvider, DrawingArea, EventControllerMotion,
+    GestureClick, IconTheme, Orientation, Overlay, Popover, Separator,
 };
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::f64::consts::{FRAC_PI_2, PI};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -139,15 +140,54 @@ fn build_ui(app: &Application) {
 
     apply_css();
 
+    // let pinned_apps = Rc::new(RefCell::new(load_pins()));
+    // let container = Box::new(Orientation::Horizontal, 8);
+    // container.add_css_class("dock-container");
+
+    // let corner_left = Box::new(Orientation::Horizontal, 0);
+    // corner_left.add_css_class("dock-corner-left");
+    // corner_left.set_valign(gtk4::Align::End);
+    // corner_left.set_size_request(16, 16);
+
+    // let corner_right = Box::new(Orientation::Horizontal, 0);
+    // corner_right.add_css_class("dock-corner-right");
+    // corner_right.set_valign(gtk4::Align::End);
+    // corner_right.set_size_request(16, 16);
+
+    // let wrapper = Box::new(Orientation::Horizontal, 0);
+    // wrapper.set_valign(gtk4::Align::End);
+    // wrapper.append(&corner_left);
+    // wrapper.append(&container);
+    // wrapper.append(&corner_right);
+
+    // let is_hovered = Rc::new(RefCell::new(false));
+    // let last_state = Rc::new(RefCell::new(String::new()));
+
+    // render_dock_items(&container, &pinned_apps);
+    // window.set_child(Some(&wrapper));
+
+    // in build_ui: vervang container/wrapper opbouw door dit
     let pinned_apps = Rc::new(RefCell::new(load_pins()));
     let container = Box::new(Orientation::Horizontal, 8);
     container.add_css_class("dock-container");
+
+    let shape = DrawingArea::new();
+    shape.set_can_target(false); // klikken moeten door naar de knoppen
+    shape.set_hexpand(true);
+    shape.set_vexpand(true);
+    shape.set_draw_func(move |_, cr, w, h| {
+        draw_dock_shape(cr, w as f64, h as f64);
+    });
+
+    let overlay = Overlay::new();
+    overlay.set_child(Some(&shape)); // bepaalt de grootte
+    overlay.add_overlay(&container); // tekent de achtergrondvorm erachter/eronder
 
     let is_hovered = Rc::new(RefCell::new(false));
     let last_state = Rc::new(RefCell::new(String::new()));
 
     render_dock_items(&container, &pinned_apps);
-    window.set_child(Some(&container));
+    window.set_child(Some(&overlay));
 
     let motion_controller = EventControllerMotion::new();
     let is_hovered_enter = is_hovered.clone();
@@ -209,7 +249,7 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool) {
 
     match get_active_workspace_windows() {
         Some(windows) if windows > 0 => {
-            window.set_margin(Edge::Bottom, -66);
+            window.set_margin(Edge::Bottom, -56);
         }
         _ => {
             window.set_margin(Edge::Bottom, 0);
@@ -443,4 +483,52 @@ fn apply_css() {
         }
         glib::ControlFlow::Continue
     });
+}
+
+// nieuwe functie, ergens toevoegen (bv. onder create_dock_button)
+fn draw_dock_shape(cr: &gtk4::cairo::Context, w: f64, h: f64) {
+    // --- tweak deze constanten ---
+    let top_r: f64 = 14.0; // radius bovenste hoeken
+    let flare_span: f64 = 40.0; // hoogte waarover de zijkant begint uit te vloeien
+    let reach: f64 = 20.0; // hoe ver de haak naar buiten uitsteekt
+    let hook: f64 = 14.0; // hoogte van de kleine terugkrul onderaan
+    let bg = (0.117, 0.117, 0.180, 0.933); // r,g,b,a achtergrond (#1e1e2eee)
+    let border = (1.0, 1.0, 1.0, 0.08); // r,g,b,a rand
+                                        // -----------------------------
+
+    let flare_y0 = h - flare_span;
+
+    cr.new_path();
+    cr.move_to(top_r, 0.0);
+    cr.line_to(w - top_r, 0.0);
+    cr.arc(w - top_r, top_r, top_r, -FRAC_PI_2, 0.0);
+    cr.line_to(w, flare_y0);
+    cr.curve_to(
+        w,
+        flare_y0 + flare_span * 0.5,
+        w + reach,
+        h - hook - flare_span * 0.15,
+        w + reach,
+        h - hook,
+    );
+    cr.curve_to(w + reach, h - hook * 0.3, w + reach * 0.4, h, w, h);
+    cr.line_to(0.0, h);
+    cr.curve_to(-reach * 0.4, h, -reach, h - hook * 0.3, -reach, h - hook);
+    cr.curve_to(
+        -reach,
+        h - hook - flare_span * 0.15,
+        0.0,
+        flare_y0 + flare_span * 0.5,
+        0.0,
+        flare_y0,
+    );
+    cr.line_to(0.0, top_r);
+    cr.arc(top_r, top_r, top_r, PI, 3.0 * FRAC_PI_2);
+    cr.close_path();
+
+    cr.set_source_rgba(bg.0, bg.1, bg.2, bg.3);
+    let _ = cr.fill_preserve();
+    cr.set_source_rgba(border.0, border.1, border.2, border.3);
+    cr.set_line_width(1.2);
+    let _ = cr.stroke();
 }
