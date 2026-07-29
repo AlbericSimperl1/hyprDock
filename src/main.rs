@@ -1,4 +1,4 @@
-mod animations;
+// mod animations;
 use gtk4::prelude::*;
 use gtk4::{
     Application, ApplicationWindow, Box, Button, CssProvider, EventControllerMotion, GestureClick,
