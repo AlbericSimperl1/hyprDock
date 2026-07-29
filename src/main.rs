@@ -209,7 +209,7 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool) {
 
     match get_active_workspace_windows() {
         Some(windows) if windows > 0 => {
-            window.set_margin(Edge::Bottom, -60);
+            window.set_margin(Edge::Bottom, -66);
         }
         _ => {
             window.set_margin(Edge::Bottom, 0);
@@ -375,12 +375,20 @@ fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Butto
     };
 
     let image = gtk4::Image::from_icon_name(&valid_icon);
-    image.set_pixel_size(36);
+    image.set_pixel_size(35);
     item_box.append(&image);
 
     if is_running {
         let dot = Box::new(Orientation::Horizontal, 0);
-        dot.add_css_class("running-dot");
+        // Verander de class naam
+        dot.add_css_class("running-pill");
+
+        // Centreer de pill onder het icoon
+        dot.set_halign(gtk4::Align::Center);
+
+        // Forceer de pill afmetingen (bijv. 20px breed, 5px hoog)
+        dot.set_size_request(20, 5);
+
         item_box.append(&dot);
     }
 
