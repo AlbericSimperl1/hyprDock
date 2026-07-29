@@ -154,34 +154,117 @@ fn build_ui(app: &Application) {
     let is_hovered = Rc::new(RefCell::new(false));
     let last_state = Rc::new(RefCell::new(String::new()));
 
-    render_dock_items(&container, &pinned_apps);
+    // Animatie state initialiseren
+    let anim_state = Rc::new(RefCell::new(animations::DockAnimation::new()));
+
+    // Speciale CSS provider voor de dynamische transforms
+    let anim_css_provider = CssProvider::new();
+    if let Some(display) = gtk4::gdk::Display::default() {
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &anim_css_provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_USER + 1,
+        );
+    }
+
+    render_dock_items(&container, &pinned_apps, &anim_state);
     bg.queue_draw();
     window.set_child(Some(&overlay));
 
+    // Muis bewegingen voor animatie detecteren (op de container)
     let motion_controller = EventControllerMotion::new();
     let is_hovered_enter = is_hovered.clone();
     let win_enter = window.clone();
+    let anim_motion = anim_state.clone();
 
     motion_controller.connect_enter(move |_, _, _| {
         *is_hovered_enter.borrow_mut() = true;
         win_enter.set_margin(Edge::Bottom, 0);
     });
 
+    let anim_motion_move = anim_state.clone();
+    motion_controller.connect_motion(move |_, x, _| {
+        anim_motion_move.borrow_mut().on_pointer_moved(x as f64);
+    });
+
     let is_hovered_leave = is_hovered.clone();
     let win_leave = window.clone();
+    let anim_leave = anim_state.clone();
 
     motion_controller.connect_leave(move |_| {
         *is_hovered_leave.borrow_mut() = false;
         check_and_update_autohide(&win_leave, false);
+        anim_leave.borrow_mut().on_pointer_exit();
     });
 
-    window.add_controller(motion_controller);
+    container.add_controller(motion_controller);
+
+    // 60 FPS Render Loop voor de animaties
+    let anim_tick_state = anim_state.clone();
+    let anim_tick_provider = anim_css_provider.clone();
+    let last_css = Rc::new(RefCell::new(String::new()));
+
+    container.add_tick_callback(move |container, _| {
+        // Verzamel de X-posities en breedtes van de knoppen
+        let mut positions = Vec::new();
+        let mut child = container.first_child();
+        while let Some(w) = child {
+            if w.is::<Button>() {
+                let alloc = w.allocation();
+                let w_w = alloc.width() as f64;
+                let cx = alloc.x() as f64 + w_w / 2.0;
+                if w_w > 1.0 {
+                    positions.push((cx, w_w));
+                }
+            }
+            child = w.next_sibling();
+        }
+
+        // Update animatie en haal de waardes op
+        {
+            let mut anim = anim_tick_state.borrow_mut();
+            anim.update_icon_positions(positions);
+            anim.tick();
+        }
+
+        // Bouw de CSS string voor deze frame
+        let anim = anim_tick_state.borrow();
+        let mut css = String::new();
+        let mut needs_update = false;
+
+        for (i, icon_state) in anim.icons.iter().enumerate() {
+            if icon_state.wave_scale > 1.001 || icon_state.wave_translate_x.abs() > 0.1 {
+                css.push_str(&format!(
+                    "#dock-btn-{} {{ transform: translate({}px, 0px) scale({}); }}\n",
+                    i, icon_state.wave_translate_x, icon_state.wave_scale
+                ));
+                needs_update = true;
+            }
+        }
+
+        // Alleen de CSS herladen als er daadwerkelijk iets veranderd is
+        let mut last = last_css.borrow_mut();
+        if needs_update {
+            if *last != css {
+                // Veranderd van css.as_bytes() naar &css
+                let _ = anim_tick_provider.load_from_data(&css);
+                *last = css;
+            }
+        } else if !last.is_empty() {
+            // Veranderd van b"" naar ""
+            let _ = anim_tick_provider.load_from_data("");
+            last.clear();
+        }
+
+        glib::ControlFlow::Continue
+    });
 
     let win_poll = window.clone();
     let is_hovered_poll = is_hovered.clone();
     let container_poll = container.clone();
     let pinned_poll = pinned_apps.clone();
     let bg_poll = bg.clone();
+    let anim_poll_state = anim_state.clone();
 
     glib::timeout_add_local(std::time::Duration::from_millis(300), move || {
         let hovered = *is_hovered_poll.borrow();
@@ -200,7 +283,7 @@ fn build_ui(app: &Application) {
         let mut prev_state = last_state.borrow_mut();
         if *prev_state != fingerprint {
             *prev_state = fingerprint;
-            render_dock_items(&container_poll, &pinned_poll);
+            render_dock_items(&container_poll, &pinned_poll, &anim_poll_state);
             bg_poll.queue_draw();
         }
 
@@ -227,7 +310,6 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
     cr.new_path();
     cr.move_to(width, height);
 
-    // bottom-right flare
     quad(
         cr,
         width,
@@ -237,22 +319,12 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
         width - nd,
         height - nd,
     );
-
     cr.line_to(width - nd, corner);
-
-    // top-right rounded corner
     cr.arc_negative(width - nd - corner, corner, corner, 0.0, -FRAC_PI_2);
-
     cr.line_to(nd + corner, 0.0);
-
-    // top-left rounded corner
     cr.arc_negative(nd + corner, corner, corner, -FRAC_PI_2, -PI);
-
     cr.line_to(nd, height - nd);
-
-    // bottom-left flare
     quad(cr, nd, height - nd, nd, height, 0.0, height);
-
     cr.close_path();
 
     cr.set_source_rgba(17.0 / 255.0, 17.0 / 255.0, 23.0 / 255.0, 0.55);
@@ -271,7 +343,7 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool) {
 
     match get_active_workspace_windows() {
         Some(windows) if windows > 0 => {
-            window.set_margin(Edge::Bottom, -77);
+            window.set_margin(Edge::Bottom, -70);
         }
         _ => {
             window.set_margin(Edge::Bottom, 0);
@@ -279,13 +351,19 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool) {
     }
 }
 
-fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
+fn render_dock_items(
+    container: &Box,
+    pinned_apps: &Rc<RefCell<Vec<DockApp>>>,
+    _anim_state: &Rc<RefCell<animations::DockAnimation>>,
+) {
     while let Some(child) = container.first_child() {
         container.remove(&child);
     }
 
     let pins = pinned_apps.borrow().clone();
     let clients = get_running_clients();
+
+    let mut btn_id = 0;
 
     for (index, app_info) in pins.iter().enumerate() {
         let matching_client = clients.iter().find(|c| {
@@ -299,6 +377,8 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
 
         let is_running = matching_client.is_some();
         let btn = create_dock_button(&app_info.icon, &app_info.name, is_running);
+        btn.set_widget_name(&format!("dock-btn-{}", btn_id));
+        btn_id += 1;
 
         let cmd = app_info.cmd.clone();
         let client_address = matching_client.map(|c| c.address.clone());
@@ -318,6 +398,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
         let pinned_apps_clone = pinned_apps.clone();
         let container_clone = container.clone();
         let btn_clone = btn.clone();
+        let anim_clone = _anim_state.clone();
 
         gesture.connect_pressed(move |_, _, _, _| {
             let popover = Popover::new();
@@ -327,11 +408,12 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
             let pinned_apps_inner = pinned_apps_clone.clone();
             let container_inner = container_clone.clone();
             let popover_clone = popover.clone();
+            let anim_inner = anim_clone.clone();
 
             unpin_btn.connect_clicked(move |_| {
                 pinned_apps_inner.borrow_mut().remove(index);
                 save_pins(&pinned_apps_inner.borrow());
-                render_dock_items(&container_inner, &pinned_apps_inner);
+                render_dock_items(&container_inner, &pinned_apps_inner, &anim_inner);
                 popover_clone.popdown();
             });
 
@@ -366,6 +448,8 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
         for client in unpinned_clients {
             let icon_name = client.class.to_lowercase();
             let btn = create_dock_button(&icon_name, &client.title, true);
+            btn.set_widget_name(&format!("dock-btn-{}", btn_id));
+            btn_id += 1;
 
             let addr = client.address.clone();
             btn.connect_clicked(move |_| {
@@ -381,6 +465,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
             let btn_clone = btn.clone();
             let client_class = client.class.clone();
             let client_title = client.title.clone();
+            let anim_clone = _anim_state.clone();
 
             gesture.connect_pressed(move |_, _, _, _| {
                 let popover = Popover::new();
@@ -392,6 +477,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                 let popover_clone = popover.clone();
                 let c_class = client_class.clone();
                 let c_title = client_title.clone();
+                let anim_inner = anim_clone.clone();
 
                 pin_btn.connect_clicked(move |_| {
                     let new_app = DockApp {
@@ -401,7 +487,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                     };
                     pinned_apps_inner.borrow_mut().push(new_app);
                     save_pins(&pinned_apps_inner.borrow());
-                    render_dock_items(&container_inner, &pinned_apps_inner);
+                    render_dock_items(&container_inner, &pinned_apps_inner, &anim_inner);
                     popover_clone.popdown();
                 });
 
@@ -476,6 +562,7 @@ window {
     min-width: 44px;
     min-height: 44px;
     transition: background-color 150ms ease;
+    transform-origin: center center;
 }
 
 .dock-button:hover {

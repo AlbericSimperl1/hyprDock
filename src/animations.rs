@@ -13,8 +13,8 @@ pub struct AnimSettings {
 impl Default for AnimSettings {
     fn default() -> Self {
         Self {
-            max_scale: 1.5,       // 150% groei
-            effect_radius: 100.0, // Hoe ver de muis invloed heeft
+            max_scale: 1.4,       // 140% groei
+            effect_radius: 120.0, // Hoe ver de muis invloed heeft
             spacing_factor: 0.5,  // Hoeveel ruimte er tussen de iconen komt
             lerp_speed: 10.0,     // Hoe hoger, hoe sneller de animatie reageert
             focus_duration: 150.0,
@@ -47,7 +47,6 @@ pub struct DockAnimation {
     pub icons: Vec<IconAnimState>,
     pub settings: AnimSettings,
 
-    // Mouse & Intensity state
     pub is_mouse_inside: bool,
     pub animation_intensity: f64,
     pub last_mouse_x: f64,
@@ -66,7 +65,6 @@ impl DockAnimation {
         }
     }
 
-    /// Update de posities en breedtes van de iconen (aanroepen als de dock verandert)
     pub fn update_icon_positions(&mut self, positions: Vec<(f64, f64)>) {
         self.icons = positions
             .iter()
@@ -74,42 +72,36 @@ impl DockAnimation {
             .collect();
     }
 
-    /// Wiskundige formule voor het afnemen van de schaal (Cosine falloff)
     fn calculate_scale(&self, distance: f64, radius: f64, max_scale: f64) -> f64 {
         if distance > radius {
             return 1.0;
         }
         let t = distance / radius;
-        // Cosine falloff: (cos(t * PI) + 1.0) / 2.0
         let factor = (t * std::f64::consts::PI).cos();
         let factor = (factor + 1.0) / 2.0;
         let factor = factor.clamp(0.0, 1.0);
         (max_scale - 1.0) * factor + 1.0
     }
 
-    /// Wordt aangeroepen als de muis beweegt over de dock
     pub fn on_pointer_moved(&mut self, mouse_x: f64) {
         self.is_mouse_inside = true;
         self.last_mouse_x = mouse_x;
     }
 
-    /// Wordt aangeroepen als de muis de dock verlaat
     pub fn on_pointer_exit(&mut self) {
         self.is_mouse_inside = false;
     }
 
-    /// Hoofdfunctie die elke frame (tick) aangeroepen moet worden
     pub fn tick(&mut self) {
         let now = Instant::now();
         let dt = now.duration_since(self.last_render_time).as_secs_f64();
         self.last_render_time = now;
 
-        // Intensiteit updaten (FocusIn / FocusOut)
         let intensity_change = dt * (1000.0 / self.settings.focus_duration);
         if self.is_mouse_inside {
-            self.animation_intensity = (1.0).min(self.animation_intensity + intensity_change);
+            self.animation_intensity = f64::min(1.0, self.animation_intensity + intensity_change);
         } else {
-            self.animation_intensity = 0.0.max(self.animation_intensity - intensity_change);
+            self.animation_intensity = f64::max(0.0, self.animation_intensity - intensity_change);
         }
 
         if self.animation_intensity <= 0.0 && !self.is_mouse_inside {
@@ -125,7 +117,6 @@ impl DockAnimation {
         self.apply_animation(mouse_x, dt);
     }
 
-    /// De kernlogica die berekent hoe elk icoon groeit en opschuift
     fn apply_animation(&mut self, mouse_x: f64, dt: f64) {
         let n = self.icons.len();
         if n == 0 {
@@ -136,7 +127,6 @@ impl DockAnimation {
         let mut extra_widths = vec![0.0; n];
         let mut total_expansion = 0.0;
 
-        // Bereken schaal en extra breedte voor elk icoon
         for i in 0..n {
             let distance = (mouse_x - self.icons[i].original_center_x).abs();
             scales[i] = self.calculate_scale(
@@ -149,7 +139,6 @@ impl DockAnimation {
             total_expansion += extra_widths[i];
         }
 
-        // Lerp (Lineaire Interpolatie) factor voor soepele overgangen
         let mut alpha = 1.0;
         if self.settings.lerp_speed > 0.0 {
             alpha = 1.0 - (-self.settings.lerp_speed * dt).exp();
@@ -158,7 +147,6 @@ impl DockAnimation {
 
         let mut cumulative_shift = 0.0;
 
-        // Uiteindelijke transformaties toepassen
         for i in 0..n {
             let self_shift = extra_widths[i] / 2.0;
             let center_offset = total_expansion / 2.0;
@@ -179,7 +167,6 @@ impl DockAnimation {
         }
     }
 
-    /// Reset alles naar 1.0 en 0.0 als de muis weg is
     fn reset_all_scales(&mut self) {
         for icon in &mut self.icons {
             icon.wave_scale = 1.0;
