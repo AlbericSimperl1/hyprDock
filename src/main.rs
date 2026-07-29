@@ -224,40 +224,46 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
         cr.curve_to(cp1x, cp1y, cp2x, cp2y, ex, ey);
     };
 
-    cr.new_path();
-    cr.move_to(width, height);
+    // Helper om het pad van de dock op te bouwen
+    let construct_path = || {
+        cr.new_path();
+        cr.move_to(width, height);
 
-    // bottom-right flare
-    quad(
-        cr,
-        width,
-        height,
-        width - nd,
-        height,
-        width - nd,
-        height - nd,
-    );
+        // bottom-right flare
+        quad(
+            cr,
+            width,
+            height,
+            width - nd,
+            height,
+            width - nd,
+            height - nd,
+        );
 
-    cr.line_to(width - nd, corner);
+        cr.line_to(width - nd, corner);
 
-    // top-right rounded corner
-    cr.arc_negative(width - nd - corner, corner, corner, 0.0, -FRAC_PI_2);
+        // top-right rounded corner
+        cr.arc_negative(width - nd - corner, corner, corner, 0.0, -FRAC_PI_2);
 
-    cr.line_to(nd + corner, 0.0);
+        cr.line_to(nd + corner, 0.0);
 
-    // top-left rounded corner
-    cr.arc_negative(nd + corner, corner, corner, -FRAC_PI_2, -PI);
+        // top-left rounded corner
+        cr.arc_negative(nd + corner, corner, corner, -FRAC_PI_2, -PI);
 
-    cr.line_to(nd, height - nd);
+        cr.line_to(nd, height - nd);
 
-    // bottom-left flare
-    quad(cr, nd, height - nd, nd, height, 0.0, height);
+        // bottom-left flare
+        quad(cr, nd, height - nd, nd, height, 0.0, height);
+    };
 
+    // 1. Vulling: wel sluiten zodat de achtergrondkleur tot de onderrand doorloopt
+    construct_path();
     cr.close_path();
-
     cr.set_source_rgba(17.0 / 255.0, 17.0 / 255.0, 23.0 / 255.0, 0.55);
-    let _ = cr.fill_preserve();
+    let _ = cr.fill();
 
+    // 2. Rand: NIET sluiten, zodat enkel de flares, zijkanten en bovenkant gestroked worden
+    construct_path();
     cr.set_source_rgba(1.0, 1.0, 1.0, 0.17);
     cr.set_line_width(3.0);
     let _ = cr.stroke();
@@ -271,7 +277,7 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool) {
 
     match get_active_workspace_windows() {
         Some(windows) if windows > 0 => {
-            window.set_margin(Edge::Bottom, -77);
+            window.set_margin(Edge::Bottom, -55);
         }
         _ => {
             window.set_margin(Edge::Bottom, 0);
@@ -437,7 +443,7 @@ fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Butto
     };
 
     let image = gtk4::Image::from_icon_name(&valid_icon);
-    image.set_pixel_size(42);
+    image.set_pixel_size(32);
     item_box.append(&image);
 
     if is_running {
