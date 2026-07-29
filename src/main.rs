@@ -209,7 +209,7 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool) {
 
     match get_active_workspace_windows() {
         Some(windows) if windows > 0 => {
-            window.set_margin(Edge::Bottom, -66);
+            window.set_margin(Edge::Bottom, -60);
         }
         _ => {
             window.set_margin(Edge::Bottom, 0);
