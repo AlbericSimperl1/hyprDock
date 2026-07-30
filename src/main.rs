@@ -1,3 +1,4 @@
+use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{
     Application, ApplicationWindow, Box, Button, CssProvider, EventControllerMotion, GestureClick,
@@ -33,6 +34,70 @@ struct HyprClient {
     title: String,
     #[serde(default)]
     workspace: Option<HyprWorkspaceInfo>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DockStyle {
+    Notch,
+    Pill,
+}
+
+// fn main() {
+//     let style = parse_args();
+
+//     let app = Application::builder()
+//         .application_id("com.omarchy.hyprdock")
+//         .build();
+
+//     app.connect_activate(move |app| build_ui(app, style));
+
+//     // BELANGRIJK: Omzeil GTK's eigen argument-parser door een lege array mee te geven!
+//     app.run_with_args(&Vec::<String>::new());
+// }
+
+// fn parse_args() -> DockStyle {
+//     let args: Vec<String> = std::env::args().collect();
+//     for arg in args.iter().skip(1) {
+//         match arg.as_str() {
+//             "--pill" | "-p" | "pill" => return DockStyle::Pill,
+//             "--notch" | "-n" | "notch" => return DockStyle::Notch,
+//             _ => {}
+//         }
+//     }
+//     DockStyle::Notch // Standaard terugvallen op Notch
+// }
+
+fn parse_args() -> DockStyle {
+    let args: Vec<String> = std::env::args().collect();
+    for arg in args.iter().skip(1) {
+        // Strip eventuele streepjes (- of --) en maak lowercase
+        let clean = arg.trim_start_matches('-').to_lowercase();
+        match clean.as_str() {
+            "pill" | "p" => return DockStyle::Pill,
+            "notch" | "n" => return DockStyle::Notch,
+            _ => {}
+        }
+    }
+    DockStyle::Notch // Standaard
+}
+
+fn main() {
+    // 1. Lees onze eigen argumenten uit
+    let style = parse_args();
+
+    // 2. Bouw de GTK applicatie
+    let app = Application::builder()
+        .application_id("com.omarchy.hyprdock")
+        .build();
+
+    app.connect_activate(move |app| build_ui(app, style));
+
+    // 3. Geef UITSLUITEND de programmanaam door aan GTK!
+    // Zo ziet GTK 'pill' of '--pill' nooit en denkt GLib nooit dat het een bestand is.
+    let prog_name = std::env::args()
+        .next()
+        .unwrap_or_else(|| "hyprdock".to_string());
+    app.run_with_args(&[prog_name]);
 }
 
 fn truncate_text(text: &str, max_len: usize) -> String {
@@ -131,15 +196,48 @@ fn get_active_workspace_windows() -> Option<i64> {
     json.get("windows")?.as_i64()
 }
 
-fn main() {
-    let app = Application::builder()
-        .application_id("com.omarchy.hyprdock")
-        .build();
-    app.connect_activate(build_ui);
-    app.run();
-}
+// fn build_ui(app: &Application, style: DockStyle) {
+//     if let Some(win) = app.active_window() {
+//         win.present();
+//         return;
+//     }
+//     let window = ApplicationWindow::builder()
+//         .application(app)
+//         .title("hyprDock")
+//         .build();
 
-fn build_ui(app: &Application) {
+//     window.init_layer_shell();
+//     window.set_namespace("hyprdock");
+//     window.set_layer(Layer::Top);
+//     window.set_keyboard_mode(KeyboardMode::None);
+//     window.set_anchor(Edge::Bottom, true);
+//     window.set_margin(Edge::Bottom, 0);
+
+//     // VOEG DIT TOE: Dwing GTK om geen minimale breedte vast te houden
+//     window.set_default_size(1, 1);
+
+//     apply_css();
+
+//     let pinned_apps = Rc::new(RefCell::new(load_pins()));
+//     let container = Box::new(Orientation::Horizontal, 8);
+//     container.add_css_class("dock-container");
+
+//     // VOEG DIT TOE: Zorg dat de container niet horizontaal uitrekent
+//     container.set_hexpand(false);
+//     container.set_halign(gtk4::Align::Center);
+
+//     let bg = gtk4::DrawingArea::new();
+//     bg.set_draw_func(move |_area, cr, width, height| match style {
+//         DockStyle::Notch => draw_dock_shape(cr, width as f64, height as f64),
+//         DockStyle::Pill => draw_pill_shape(cr, width as f64, height as f64),
+//     });
+
+//     let overlay = Overlay::new();
+//     overlay.set_child(Some(&bg));
+//     overlay.add_overlay(&container);
+//     overlay.set_measure_overlay(&container, true);
+
+fn build_ui(app: &Application, style: DockStyle) {
     let window = ApplicationWindow::builder()
         .application(app)
         .title("hyprDock")
@@ -151,23 +249,27 @@ fn build_ui(app: &Application) {
     window.set_keyboard_mode(KeyboardMode::None);
     window.set_anchor(Edge::Bottom, true);
     window.set_margin(Edge::Bottom, 0);
-
-    // VOEG DIT TOE: Dwing GTK om geen minimale breedte vast te houden
     window.set_default_size(1, 1);
+
+    let style_class = match style {
+        DockStyle::Pill => "style-pill",
+        DockStyle::Notch => "style-notch",
+    };
+    window.add_css_class(style_class);
 
     apply_css();
 
     let pinned_apps = Rc::new(RefCell::new(load_pins()));
     let container = Box::new(Orientation::Horizontal, 8);
     container.add_css_class("dock-container");
-
-    // VOEG DIT TOE: Zorg dat de container niet horizontaal uitrekent
+    container.add_css_class(style_class);
     container.set_hexpand(false);
     container.set_halign(gtk4::Align::Center);
 
     let bg = gtk4::DrawingArea::new();
-    bg.set_draw_func(|_area, cr, width, height| {
-        draw_dock_shape(cr, width as f64, height as f64);
+    bg.set_draw_func(move |_area, cr, width, height| match style {
+        DockStyle::Notch => draw_dock_shape(cr, width as f64, height as f64),
+        DockStyle::Pill => draw_pill_shape(cr, width as f64, height as f64),
     });
 
     let overlay = Overlay::new();
@@ -175,6 +277,16 @@ fn build_ui(app: &Application) {
     overlay.add_overlay(&container);
     overlay.set_measure_overlay(&container, true);
 
+    // DIT IS DE OPLOSSING: Maak een verticale hoofdbox met een onzichtbare spacer onderaan
+    let root_box = Box::new(Orientation::Vertical, 0);
+    let spacer = Box::new(Orientation::Vertical, 0);
+    spacer.add_css_class("dock-spacer");
+    spacer.add_css_class(style_class);
+
+    root_box.append(&overlay);
+    root_box.append(&spacer);
+
+    window.set_child(Some(&root_box));
     // ... rest van je build_ui code ...
 
     let is_hovered = Rc::new(RefCell::new(false));
@@ -292,6 +404,43 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
     let _ = cr.stroke();
 }
 
+// fn check_and_update_autohide(
+//     window: &ApplicationWindow,
+//     is_hovered: bool,
+//     is_menu_open: bool,
+//     style: DockStyle,
+// ) {
+//     // Stel de zwevende marge in op basis van de stijl
+//     let visible_margin = match style {
+//         DockStyle::Pill => 12, // 12px zweven boven de schermrand (verhoog/verlaag naar wens)
+//         DockStyle::Notch => 0, // Sluit direct aan op de onderkant
+//     };
+
+//     if is_hovered || is_menu_open {
+//         window.set_margin(Edge::Bottom, visible_margin);
+//         return;
+//     }
+
+//     match get_active_workspace_windows() {
+//         Some(windows) if windows > 0 => {
+//             let alloc_height = window.allocated_height();
+
+//             // Als de dock verborgen is, schuiven we hem omlaag.
+//             // Er blijft altijd 2px zichtbaar aan de onderkant van het scherm.
+//             let hidden_margin = if alloc_height > 2 {
+//                 -(alloc_height - 2)
+//             } else {
+//                 -55
+//             };
+
+//             window.set_margin(Edge::Bottom, hidden_margin);
+//         }
+//         _ => {
+//             window.set_margin(Edge::Bottom, visible_margin);
+//         }
+//     }
+// }
+
 fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_menu_open: bool) {
     if is_hovered || is_menu_open {
         window.set_margin(Edge::Bottom, 0);
@@ -300,11 +449,9 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_me
 
     match get_active_workspace_windows() {
         Some(windows) if windows > 0 => {
-            // Haal de actuele hoogte van het venster op
             let alloc_height = window.allocated_height();
 
-            // Houd altijd 2px zichtbaar aan de onderkant van het scherm
-            // (Als de hoogte nog niet bekend is, vallen we terug op -55)
+            // Verberg de dock, houd altijd 2px grijpzone onderaan het scherm
             let hidden_margin = if alloc_height > 2 {
                 -(alloc_height - 2)
             } else {
@@ -721,41 +868,6 @@ fn render_dock_items(
     }
 }
 
-// fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Button {
-//     let btn = Button::builder().build();
-//     btn.add_css_class("dock-button");
-
-//     let item_box = Box::new(Orientation::Vertical, 2);
-
-//     let display = gtk4::gdk::Display::default().expect("Geen GDK display gevonden");
-//     let icon_theme = IconTheme::for_display(&display);
-
-//     let clean_name = icon_name.to_lowercase();
-//     let valid_icon = if icon_theme.has_icon(icon_name) {
-//         icon_name.to_string()
-//     } else if icon_theme.has_icon(&clean_name) {
-//         clean_name
-//     } else if clean_name.contains("zen") && icon_theme.has_icon("zen-browser") {
-//         "zen-browser".to_string()
-//     } else {
-//         "application-x-executable".to_string()
-//     };
-
-//     let image = gtk4::Image::from_icon_name(&valid_icon);
-//     image.set_pixel_size(40);
-//     item_box.append(&image);
-
-//     if is_running {
-//         let dot = Box::new(Orientation::Horizontal, 0);
-//         dot.add_css_class("running-dot");
-//         item_box.append(&dot);
-//     }
-
-//     btn.set_child(Some(&item_box));
-//     btn.set_tooltip_text(Some(tooltip));
-//     btn
-// }
-
 fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Button {
     let btn = Button::builder().build();
     btn.add_css_class("dock-button");
@@ -938,4 +1050,46 @@ popover contents {
         }
         glib::ControlFlow::Continue
     });
+}
+
+fn draw_pill_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
+    let corner_radius: f64 = 18.0_f64.min(height / 2.0);
+
+    cr.new_path();
+    cr.arc(
+        width - corner_radius,
+        corner_radius,
+        corner_radius,
+        -std::f64::consts::FRAC_PI_2,
+        0.0,
+    );
+    cr.arc(
+        width - corner_radius,
+        height - corner_radius,
+        corner_radius,
+        0.0,
+        std::f64::consts::FRAC_PI_2,
+    );
+    cr.arc(
+        corner_radius,
+        height - corner_radius,
+        corner_radius,
+        std::f64::consts::FRAC_PI_2,
+        std::f64::consts::PI,
+    );
+    cr.arc(
+        corner_radius,
+        corner_radius,
+        corner_radius,
+        std::f64::consts::PI,
+        3.0 * std::f64::consts::FRAC_PI_2,
+    );
+    cr.close_path();
+
+    cr.set_source_rgba(17.0 / 255.0, 17.0 / 255.0, 23.0 / 255.0, 0.55);
+    let _ = cr.fill_preserve();
+
+    cr.set_source_rgba(1.0, 1.0, 1.0, 0.17);
+    cr.set_line_width(2.0);
+    let _ = cr.stroke();
 }
