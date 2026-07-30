@@ -1,7 +1,11 @@
 # hyprDock
 
-Native rust dock for hyprland composed desktop environments. Upon the first launch both pins.json and style.css get created in .config/hyprDock.
-Style editing implements live editing. There could be issues with the activation area of the notch/pill depending on the vertical size (top and bottom margins/paddings).
+Native rust dock for hyprland composed desktop environments. Upon the first launch both pins.json and style.css get created in .config/hyprDock. Live style editing is possible.
+The dock style can be altered via the launch flags in the terminal.
+
+## flags
+- MacOS style dock: hyprDock pill / hyprDock --pill / hyprDock -p
+- Notch style dock: hyprDock notch / hyprDock --notch / hyprDock -n
 
 ## Functionalities
 
