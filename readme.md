@@ -4,8 +4,12 @@ Native rust dock for hyprland composed desktop environments. Upon the first laun
 The dock style can be altered via the launch flags in the terminal.
 
 ## flags
+
 - MacOS style dock: hyprDock pill / hyprDock --pill / hyprDock -p
+  ![MacOS style dock](./screens/pillDock.png)
+
 - Notch style dock: hyprDock notch / hyprDock --notch / hyprDock -n
+  ![Notch style dock](./screens/notchDock.jpg)
 
 ## Functionalities
 
