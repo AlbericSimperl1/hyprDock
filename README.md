@@ -21,6 +21,16 @@ The dock style can be altered via the launch flags in the terminal.
 - MacOS style dock
 - Notch style dock
 
-## possible extensions
+## installation
 
-- different bar positions
+### prerequisites
+
+- Rust
+- GTK4
+- GTK layer shell
+
+### arch install
+
+```bash
+cargo install --git https://github.com/AlbericSimperl1/hyprDock.git
+```
