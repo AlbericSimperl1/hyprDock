@@ -321,6 +321,22 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
     let _ = cr.stroke();
 }
 
+// fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_menu_open: bool) {
+//     if is_hovered || is_menu_open {
+//         window.set_margin(Edge::Bottom, 0);
+//         return;
+//     }
+
+//     match get_active_workspace_windows() {
+//         Some(windows) if windows > 0 => {
+//             window.set_margin(Edge::Bottom, -60);
+//         }
+//         _ => {
+//             window.set_margin(Edge::Bottom, 0);
+//         }
+//     }
+// }
+
 fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_menu_open: bool) {
     if is_hovered || is_menu_open {
         window.set_margin(Edge::Bottom, 0);
@@ -329,7 +345,18 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_me
 
     match get_active_workspace_windows() {
         Some(windows) if windows > 0 => {
-            window.set_margin(Edge::Bottom, -60);
+            // Haal de actuele hoogte van het venster op
+            let alloc_height = window.allocated_height();
+
+            // Houd altijd 2px zichtbaar aan de onderkant van het scherm
+            // (Als de hoogte nog niet bekend is, vallen we terug op -55)
+            let hidden_margin = if alloc_height > 2 {
+                -(alloc_height - 2)
+            } else {
+                -55
+            };
+
+            window.set_margin(Edge::Bottom, hidden_margin);
         }
         _ => {
             window.set_margin(Edge::Bottom, 0);
