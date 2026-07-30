@@ -139,35 +139,6 @@ fn main() {
     app.run();
 }
 
-// fn build_ui(app: &Application) {
-//     let window = ApplicationWindow::builder()
-//         .application(app)
-//         .title("hyprDock")
-//         .build();
-
-//     window.init_layer_shell();
-//     window.set_namespace("hyprdock");
-//     window.set_layer(Layer::Top);
-//     window.set_keyboard_mode(KeyboardMode::None);
-//     window.set_anchor(Edge::Bottom, true);
-//     window.set_margin(Edge::Bottom, 0);
-
-//     apply_css();
-
-//     let pinned_apps = Rc::new(RefCell::new(load_pins()));
-//     let container = Box::new(Orientation::Horizontal, 8);
-//     container.add_css_class("dock-container");
-
-//     let bg = gtk4::DrawingArea::new();
-//     bg.set_draw_func(|_area, cr, width, height| {
-//         draw_dock_shape(cr, width as f64, height as f64);
-//     });
-
-//     let overlay = Overlay::new();
-//     overlay.set_child(Some(&bg));
-//     overlay.add_overlay(&container);
-//     overlay.set_measure_overlay(&container, true);
-
 fn build_ui(app: &Application) {
     let window = ApplicationWindow::builder()
         .application(app)
@@ -320,22 +291,6 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
     cr.set_line_width(3.0);
     let _ = cr.stroke();
 }
-
-// fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_menu_open: bool) {
-//     if is_hovered || is_menu_open {
-//         window.set_margin(Edge::Bottom, 0);
-//         return;
-//     }
-
-//     match get_active_workspace_windows() {
-//         Some(windows) if windows > 0 => {
-//             window.set_margin(Edge::Bottom, -60);
-//         }
-//         _ => {
-//             window.set_margin(Edge::Bottom, 0);
-//         }
-//     }
-// }
 
 fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_menu_open: bool) {
     if is_hovered || is_menu_open {
@@ -766,6 +721,41 @@ fn render_dock_items(
     }
 }
 
+// fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Button {
+//     let btn = Button::builder().build();
+//     btn.add_css_class("dock-button");
+
+//     let item_box = Box::new(Orientation::Vertical, 2);
+
+//     let display = gtk4::gdk::Display::default().expect("Geen GDK display gevonden");
+//     let icon_theme = IconTheme::for_display(&display);
+
+//     let clean_name = icon_name.to_lowercase();
+//     let valid_icon = if icon_theme.has_icon(icon_name) {
+//         icon_name.to_string()
+//     } else if icon_theme.has_icon(&clean_name) {
+//         clean_name
+//     } else if clean_name.contains("zen") && icon_theme.has_icon("zen-browser") {
+//         "zen-browser".to_string()
+//     } else {
+//         "application-x-executable".to_string()
+//     };
+
+//     let image = gtk4::Image::from_icon_name(&valid_icon);
+//     image.set_pixel_size(40);
+//     item_box.append(&image);
+
+//     if is_running {
+//         let dot = Box::new(Orientation::Horizontal, 0);
+//         dot.add_css_class("running-dot");
+//         item_box.append(&dot);
+//     }
+
+//     btn.set_child(Some(&item_box));
+//     btn.set_tooltip_text(Some(tooltip));
+//     btn
+// }
+
 fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Button {
     let btn = Button::builder().build();
     btn.add_css_class("dock-button");
@@ -787,7 +777,13 @@ fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Butto
     };
 
     let image = gtk4::Image::from_icon_name(&valid_icon);
-    image.set_pixel_size(40);
+
+    // VERWIJDER OF COMMENTEER DEZE REGEL:
+    // image.set_pixel_size(40);
+
+    // VOEG DEZE REGEL TOE:
+    image.add_css_class("dock-icon");
+
     item_box.append(&image);
 
     if is_running {
