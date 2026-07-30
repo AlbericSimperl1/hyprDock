@@ -53,22 +53,18 @@ fn parse_args() -> DockStyle {
             _ => {}
         }
     }
-    DockStyle::Notch // Standaard
+    DockStyle::Notch
 }
 
 fn main() {
-    // 1. Lees onze eigen argumenten uit
     let style = parse_args();
 
-    // 2. Bouw de GTK applicatie
     let app = Application::builder()
         .application_id("com.omarchy.hyprdock")
         .build();
 
     app.connect_activate(move |app| build_ui(app, style));
 
-    // 3. Geef UITSLUITEND de programmanaam door aan GTK!
-    // Zo ziet GTK 'pill' of '--pill' nooit en denkt GLib nooit dat het een bestand is.
     let prog_name = std::env::args()
         .next()
         .unwrap_or_else(|| "hyprdock".to_string());
@@ -227,7 +223,6 @@ fn build_ui(app: &Application, style: DockStyle) {
 
     render_dock_items(&container, &pinned_apps, &is_menu_open);
     bg.queue_draw();
-    // window.set_child(Some(&overlay));
 
     let motion_controller = EventControllerMotion::new();
     let is_hovered_enter = is_hovered.clone();
@@ -346,7 +341,6 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_me
         Some(windows) if windows > 0 => {
             let alloc_height = window.allocated_height();
 
-            // Verberg de dock, houd altijd 2px grijpzone onderaan het scherm
             let hidden_margin = if alloc_height > 2 {
                 -(alloc_height - 2)
             } else {
@@ -393,7 +387,6 @@ fn render_dock_items(
         let cmd = app_info.cmd.clone();
         let first_client_addr = matching_clients.first().map(|c| c.address.clone());
 
-        // Linker muisklik
         let addr_click = first_client_addr.clone();
         let cmd_click = cmd.clone();
         btn.connect_clicked(move |_| {
@@ -406,7 +399,6 @@ fn render_dock_items(
             }
         });
 
-        // Middle-click: Altijd nieuw venster openen
         let middle_gesture = GestureClick::new();
         middle_gesture.set_button(2);
         let cmd_middle = cmd.clone();
@@ -415,7 +407,6 @@ fn render_dock_items(
         });
         btn.add_controller(middle_gesture);
 
-        // Rechter muisklik: Menu
         let gesture = GestureClick::new();
         gesture.set_button(3);
         let pinned_apps_clone = pinned_apps.clone();
@@ -442,7 +433,6 @@ fn render_dock_items(
             let popover_box = Box::new(Orientation::Vertical, 2);
             popover_box.add_css_class("popover-box");
 
-            // 1. Naam van de App
             let header_label = gtk4::Label::new(Some(&app_name_menu));
             header_label.add_css_class("menu-header");
             header_label.set_xalign(0.0);
@@ -474,7 +464,6 @@ fn render_dock_items(
             unpin_box.add_controller(click_unpin);
             popover_box.append(&unpin_box);
 
-            // 3. Lijst van actieve vensters
             if !matching_clients.is_empty() {
                 let sep2 = Separator::new(Orientation::Horizontal);
                 sep2.add_css_class("popover-separator");
@@ -520,7 +509,6 @@ fn render_dock_items(
                     item_box.add_controller(click_win);
                     item_box.append(&win_label);
 
-                    // Kruisje (✕)
                     let close_label = gtk4::Label::new(Some("✕"));
                     close_label.add_css_class("close-btn-label");
                     let addr_close = client.address.clone();
@@ -543,7 +531,6 @@ fn render_dock_items(
                     popover_box.append(&item_box);
                 }
 
-                // 4. Plusknop (+)
                 let add_box = Box::new(Orientation::Horizontal, 0);
                 add_box.add_css_class("menu-item-row");
                 let add_label = gtk4::Label::new(Some("+"));
@@ -571,7 +558,6 @@ fn render_dock_items(
         container.append(&btn);
     }
 
-    // Ongepinde geopende vensters
     let unpinned_clients: Vec<&HyprClient> = clients
         .iter()
         .filter(|client| {
