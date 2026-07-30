@@ -42,31 +42,6 @@ enum DockStyle {
     Pill,
 }
 
-// fn main() {
-//     let style = parse_args();
-
-//     let app = Application::builder()
-//         .application_id("com.omarchy.hyprdock")
-//         .build();
-
-//     app.connect_activate(move |app| build_ui(app, style));
-
-//     // BELANGRIJK: Omzeil GTK's eigen argument-parser door een lege array mee te geven!
-//     app.run_with_args(&Vec::<String>::new());
-// }
-
-// fn parse_args() -> DockStyle {
-//     let args: Vec<String> = std::env::args().collect();
-//     for arg in args.iter().skip(1) {
-//         match arg.as_str() {
-//             "--pill" | "-p" | "pill" => return DockStyle::Pill,
-//             "--notch" | "-n" | "notch" => return DockStyle::Notch,
-//             _ => {}
-//         }
-//     }
-//     DockStyle::Notch // Standaard terugvallen op Notch
-// }
-
 fn parse_args() -> DockStyle {
     let args: Vec<String> = std::env::args().collect();
     for arg in args.iter().skip(1) {
@@ -196,47 +171,6 @@ fn get_active_workspace_windows() -> Option<i64> {
     json.get("windows")?.as_i64()
 }
 
-// fn build_ui(app: &Application, style: DockStyle) {
-//     if let Some(win) = app.active_window() {
-//         win.present();
-//         return;
-//     }
-//     let window = ApplicationWindow::builder()
-//         .application(app)
-//         .title("hyprDock")
-//         .build();
-
-//     window.init_layer_shell();
-//     window.set_namespace("hyprdock");
-//     window.set_layer(Layer::Top);
-//     window.set_keyboard_mode(KeyboardMode::None);
-//     window.set_anchor(Edge::Bottom, true);
-//     window.set_margin(Edge::Bottom, 0);
-
-//     // VOEG DIT TOE: Dwing GTK om geen minimale breedte vast te houden
-//     window.set_default_size(1, 1);
-
-//     apply_css();
-
-//     let pinned_apps = Rc::new(RefCell::new(load_pins()));
-//     let container = Box::new(Orientation::Horizontal, 8);
-//     container.add_css_class("dock-container");
-
-//     // VOEG DIT TOE: Zorg dat de container niet horizontaal uitrekent
-//     container.set_hexpand(false);
-//     container.set_halign(gtk4::Align::Center);
-
-//     let bg = gtk4::DrawingArea::new();
-//     bg.set_draw_func(move |_area, cr, width, height| match style {
-//         DockStyle::Notch => draw_dock_shape(cr, width as f64, height as f64),
-//         DockStyle::Pill => draw_pill_shape(cr, width as f64, height as f64),
-//     });
-
-//     let overlay = Overlay::new();
-//     overlay.set_child(Some(&bg));
-//     overlay.add_overlay(&container);
-//     overlay.set_measure_overlay(&container, true);
-
 fn build_ui(app: &Application, style: DockStyle) {
     let window = ApplicationWindow::builder()
         .application(app)
@@ -277,7 +211,6 @@ fn build_ui(app: &Application, style: DockStyle) {
     overlay.add_overlay(&container);
     overlay.set_measure_overlay(&container, true);
 
-    // DIT IS DE OPLOSSING: Maak een verticale hoofdbox met een onzichtbare spacer onderaan
     let root_box = Box::new(Orientation::Vertical, 0);
     let spacer = Box::new(Orientation::Vertical, 0);
     spacer.add_css_class("dock-spacer");
@@ -287,7 +220,6 @@ fn build_ui(app: &Application, style: DockStyle) {
     root_box.append(&spacer);
 
     window.set_child(Some(&root_box));
-    // ... rest van je build_ui code ...
 
     let is_hovered = Rc::new(RefCell::new(false));
     let is_menu_open = Rc::new(RefCell::new(false));
@@ -853,10 +785,6 @@ fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Butto
 
     let image = gtk4::Image::from_icon_name(&valid_icon);
 
-    // VERWIJDER OF COMMENTEER DEZE REGEL:
-    // image.set_pixel_size(40);
-
-    // VOEG DEZE REGEL TOE:
     image.add_css_class("dock-icon");
 
     item_box.append(&image);
@@ -872,329 +800,104 @@ fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Butto
     btn
 }
 
-// fn apply_css() {
-//     let provider = CssProvider::new();
-//     let css_path = get_css_path();
-
-//     let default_css = r#"
-//         /*
-//         BASE SHARED SETTINGS ##################################################################################
-//         */
-//         /* window size */
-//         window {
-//             background-color: transparent;
-//             padding-top: 20px;
-//         }
-
-//         /* GTK standard resets */
-//         .dock-container {
-//             background-color: transparent;
-//             background-image: none;
-//             border: none;
-//             box-shadow: none;
-//         }
-
-//         /*
-//         BASE STYLING SETTINGS ########################################################################################
-//         */
-//         .dock-button {
-//             background-color: transparent;
-//             background-image: none;
-//             border: none;
-//             box-shadow: none;
-//             border-radius: 14px;
-//             padding: 5px 5px 7px 5px;
-//             transform-origin: bottom center;
-//             transition: transform 50ms cubic-bezier(0.2, 0, 0.2, 1);
-//         }
-
-//         /* MacOS style growing, not that smooth tho */
-//         .dock-button:hover {
-//             background-color: transparent;
-//             transform: scale(1.4);
-//         }
-
-//         /* no active background */
-//         .dock-button:active,
-//         .dock-button:checked {
-//             background-color: transparent;
-//         }
-//         /* app icons (can be used per style as well)*/
-//         .dock-icon {
-//             -gtk-icon-size: 52px;
-//             min-width: 32px;
-//             min-height: 32px;
-//         }
-
-//         /* running indicator */
-//         .running-dot {
-//             min-width: 2px;
-//             min-height: 2px;
-//             border-radius: 5px;
-//             background-color: rgba(255, 255, 255, 0.53);
-//             margin-top: 1px;
-//             margin-bottom: -2px;
-//             margin-left: 12px;
-//             margin-right: 12px;
-//         }
-
-//         /* separator between pinned (running or not) and unpinned running apps */
-//         .dock-separator {
-//             min-width: 2px;
-//             background-color: rgba(255, 255, 255, 0.17);
-//             margin: 6px 4px;
-//         }
-
-//         /*
-//         RIGHT CLICK CONTEXT MENU ####################################################################################################
-//         */
-//         .popover-btn {
-//             padding: 6px 12px;
-//         }
-
-//         /* doesn't want to blur :((( */
-//         popover contents {
-//             background-color: rgba(2, 6, 12, 0.75);
-//             border: 2px solid rgba(255, 255, 255, 0.12);
-//             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-//         }
-
-//         /*
-//         MacOS DOCK STYLING  (pill / --pill / -p) ####################################################################################
-//         */
-//         /* app icon padding */
-//         .style-pill.dock-container {
-//             padding: 8px 16px;
-//             margin: 0px 4px;
-//         }
-
-//         /* floating pill bar (deadzone at the bottom) */
-//         .style-pill.dock-spacer {
-//             min-height: 16px;
-//         }
-
-//         /* app icon size */
-//         /*
-//         .style-pill .dock-icon {
-//             -gtk-icon-size: 48px;
-//         }
-//         */
-//         /*
-//         NOTCH DOCK STYLING (notch / --notch / -n)
-//         */
-//         /* padding */
-//         .style-notch.dock-container {
-//             padding: 4px 14px 2px 14px;
-//             margin: 0px 4px;
-//         }
-
-//         /* app icon size */
-//         /*
-//         .style-notch .dock-icon {
-//             -gtk-icon-size: 48px;
-//         }
-//         */
-//         /* no float space needed */
-//         .style-notch.dock-spacer {
-//             min-height: 0px;
-//         }
-
-// "#;
-
-//     if !css_path.exists() {
-//         let _ = fs::write(&css_path, default_css);
-//     }
-
-//     provider.load_from_path(&css_path);
-
-//     if let Some(display) = gtk4::gdk::Display::default() {
-//         gtk4::style_context_add_provider_for_display(
-//             &display,
-//             &provider,
-//             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-//         );
-//     }
-
-//     let mut last_modified: Option<SystemTime> =
-//         fs::metadata(&css_path).and_then(|m| m.modified()).ok();
-
-//     let provider_clone = provider.clone();
-//     let css_path_clone = css_path.clone();
-
-//     glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-//         if let Ok(metadata) = fs::metadata(&css_path_clone) {
-//             if let Ok(modified) = metadata.modified() {
-//                 if last_modified != Some(modified) {
-//                     last_modified = Some(modified);
-//                     provider_clone.load_from_path(&css_path_clone);
-//                     println!("css reloaded");
-//                 }
-//             }
-//         }
-//         glib::ControlFlow::Continue
-//     });
-// }
-
 fn apply_css() {
     let provider = CssProvider::new();
     let css_path = get_css_path();
 
     let default_css = r#"
+        /* BASE SHARED SETTINGS */
+        window {
+            background-color: transparent;
+            padding-top: 20px;
+        }
 
+        .dock-container {
+            background-color: transparent;
+            background-image: none;
+            border: none;
+            box-shadow: none;
+        }
 
-        /*
-                BASE SHARED SETTINGS ##################################################################################
-                */
-                /* window size */
-                window {
-                    background-color: transparent;
-                    padding-top: 20px;
-                }
+        .dock-button {
+            background-color: transparent;
+            background-image: none;
+            border: none;
+            box-shadow: none;
+            border-radius: 14px;
+            padding: 5px 5px 7px 5px;
+            transform-origin: bottom center;
+            transition: transform 50ms cubic-bezier(0.2, 0, 0.2, 1);
+        }
 
-                /* GTK standard resets */
-                .dock-container {
-                    background-color: transparent;
-                    background-image: none;
-                    border: none;
-                    box-shadow: none;
-                }
+        .dock-button:hover {
+            background-color: transparent;
+            transform: scale(1.4);
+        }
 
-                /*
-                BASE STYLING SETTINGS ########################################################################################
-                */
-                .dock-button {
-                    background-color: transparent;
-                    background-image: none;
-                    border: none;
-                    box-shadow: none;
-                    border-radius: 14px;
-                    padding: 5px 5px 7px 5px;
-                    transform-origin: bottom center;
-                    transition: transform 50ms cubic-bezier(0.2, 0, 0.2, 1);
-                }
+        .dock-button:active,
+        .dock-button:checked {
+            background-color: transparent;
+        }
 
-                /* MacOS style growing, not that smooth tho */
-                .dock-button:hover {
-                    background-color: transparent;
-                    transform: scale(1.4);
-                }
+        .dock-icon {
+            -gtk-icon-size: 52px;
+            min-width: 32px;
+            min-height: 32px;
+        }
 
-                /* no active background */
-                .dock-button:active,
-                .dock-button:checked {
-                    background-color: transparent;
-                }
-                /* app icons (can be used per style as well)*/
-                .dock-icon {
-                    -gtk-icon-size: 52px;
-                    min-width: 32px;
-                    min-height: 32px;
-                }
+        .running-dot {
+            min-width: 2px;
+            min-height: 2px;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.53);
+            margin-top: 1px;
+            margin-bottom: -2px;
+            margin-left: 12px;
+            margin-right: 12px;
+        }
 
-                /* running indicator */
-                .running-dot {
-                    min-width: 2px;
-                    min-height: 2px;
-                    border-radius: 5px;
-                    background-color: rgba(255, 255, 255, 0.53);
-                    margin-top: 1px;
-                    margin-bottom: -2px;
-                    margin-left: 12px;
-                    margin-right: 12px;
-                }
+        .dock-separator {
+            min-width: 2px;
+            background-color: rgba(255, 255, 255, 0.17);
+            margin: 6px 4px;
+        }
 
-                /* separator between pinned (running or not) and unpinned running apps */
-                .dock-separator {
-                    min-width: 2px;
-                    background-color: rgba(255, 255, 255, 0.17);
-                    margin: 6px 4px;
-                }
+        .popover-btn {
+            padding: 6px 12px;
+        }
 
-                /*
-                RIGHT CLICK CONTEXT MENU ####################################################################################################
-                */
-                .popover-btn {
-                    padding: 6px 12px;
-                }
+        popover contents {
+            background-color: rgba(2, 6, 12, 0.75);
+            border: 2px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
 
-                /* doesn't want to blur :((( */
-                popover contents {
-                    background-color: rgba(2, 6, 12, 0.75);
-                    border: 2px solid rgba(255, 255, 255, 0.12);
-                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-                }
+        .style-pill.dock-container {
+            padding: 8px 16px;
+            margin: 0px 4px;
+        }
 
-                /*
-                MacOS DOCK STYLING  (pill / --pill / -p) ####################################################################################
-                */
-                /* app icon padding */
-                .style-pill.dock-container {
-                    padding: 8px 16px;
-                    margin: 0px 4px;
-                }
+        .style-pill.dock-spacer {
+            min-height: 16px;
+        }
 
-                /* floating pill bar (deadzone at the bottom) */
-                .style-pill.dock-spacer {
-                    min-height: 16px;
-                }
+        .style-notch.dock-container {
+            padding: 4px 14px 2px 14px;
+            margin: 0px 4px;
+        }
 
-                /* app icon size */
-                /*
-                .style-pill .dock-icon {
-                    -gtk-icon-size: 48px;
-                }
-                */
-                /*
-                NOTCH DOCK STYLING (notch / --notch / -n)
-                */
-                /* padding */
-                .style-notch.dock-container {
-                    padding: 4px 14px 2px 14px;
-                    margin: 0px 4px;
-                }
-
-                /* app icon size */
-                /*
-                .style-notch .dock-icon {
-                    -gtk-icon-size: 48px;
-                }
-                */
-                /* no float space needed */
-                .style-notch.dock-spacer {
-                    min-height: 0px;
-                }
-
+        .style-notch.dock-spacer {
+            min-height: 0px;
+        }
     "#;
 
     if !css_path.exists() {
         let _ = fs::write(&css_path, default_css);
     }
 
-    // Helper closure om CSS veilig in te laden zonder te crashen bij parse-fouten
-    // let safe_load_css = |provider: &CssProvider, path: &PathBuf| {
-    //     match fs::read_to_string(path) {
-    //         Ok(css_content) => {
-    //             // GTK4 gebruikt load_from_data voor raw strings/bytes
-    //             provider.load_from_data(&css_content);
-    //         }
-    //         Err(e) => eprintln!("Kon CSS bestand niet lezen: {}", e),
-    //     }
-    // };
-
-    let reload_css_safe = |prov: &CssProvider, path: &PathBuf| {
-        if let Ok(content) = fs::read_to_string(path) {
-            // Voorkom laden als het bestand nog leeg is (tijdens save event van bijv. Neovim/VSCode)
-            if content.trim().is_empty() {
-                return;
-            }
-
-            // Nieuwe provider instantie aanmaken voorkomt dat een gecorrumpeerde CSS state blijft hangen
-            prov.load_from_data(&content);
-        }
-    };
-
-    // Eerste keer inladen
-    reload_css_safe(&provider, &css_path);
+    if css_path.exists() {
+        provider.load_from_path(&css_path);
+    }
 
     if let Some(display) = gtk4::gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
@@ -1207,19 +910,18 @@ fn apply_css() {
     let mut last_modified: Option<SystemTime> =
         fs::metadata(&css_path).and_then(|m| m.modified()).ok();
 
-    let provider_clone = provider.clone();
     let css_path_clone = css_path.clone();
+    let provider_clone = provider.clone();
 
-    // Check elke seconde of de CSS is gewijzigd
-    glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+    // Hot reload van CSS zonder procesherstart
+    glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
         if let Ok(metadata) = fs::metadata(&css_path_clone) {
             if let Ok(modified) = metadata.modified() {
                 if last_modified != Some(modified) {
                     last_modified = Some(modified);
-
-                    // Gebruik hier de veilige lader!
-                    reload_css_safe(&provider_clone, &css_path_clone);
-                    println!("CSS succesvol live herladen!");
+                    if metadata.len() > 0 {
+                        provider_clone.load_from_path(&css_path_clone);
+                    }
                 }
             }
         }
