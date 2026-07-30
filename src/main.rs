@@ -285,6 +285,143 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool) {
     }
 }
 
+// fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
+//     while let Some(child) = container.first_child() {
+//         container.remove(&child);
+//     }
+
+//     let pins = pinned_apps.borrow().clone();
+//     let clients = get_running_clients();
+
+//     for (index, app_info) in pins.iter().enumerate() {
+//         let matching_client = clients.iter().find(|c| {
+//             let class_lower = c.class.to_lowercase();
+//             let app_cmd = app_info.cmd.to_lowercase();
+//             let app_name = app_info.name.to_lowercase();
+//             class_lower.contains(&app_cmd)
+//                 || app_cmd.contains(&class_lower)
+//                 || class_lower.contains(&app_name)
+//         });
+
+//         let is_running = matching_client.is_some();
+//         let btn = create_dock_button(&app_info.icon, &app_info.name, is_running);
+
+//         let cmd = app_info.cmd.clone();
+//         let client_address = matching_client.map(|c| c.address.clone());
+
+//         btn.connect_clicked(move |_| {
+//             if let Some(ref addr) = client_address {
+//                 let _ = Command::new("hyprctl")
+//                     .args(["dispatch", "focuswindow", &format!("address:{}", addr)])
+//                     .spawn();
+//             } else {
+//                 let _ = Command::new("sh").arg("-c").arg(&cmd).spawn();
+//             }
+//         });
+
+//         let gesture = GestureClick::new();
+//         gesture.set_button(3);
+//         let pinned_apps_clone = pinned_apps.clone();
+//         let container_clone = container.clone();
+//         let btn_clone = btn.clone();
+
+//         gesture.connect_pressed(move |_, _, _, _| {
+//             let popover = Popover::new();
+//             let unpin_btn = Button::with_label("Ontpinnen van hyprDock");
+//             unpin_btn.add_css_class("popover-btn");
+
+//             let pinned_apps_inner = pinned_apps_clone.clone();
+//             let container_inner = container_clone.clone();
+//             let popover_clone = popover.clone();
+
+//             unpin_btn.connect_clicked(move |_| {
+//                 pinned_apps_inner.borrow_mut().remove(index);
+//                 save_pins(&pinned_apps_inner.borrow());
+//                 render_dock_items(&container_inner, &pinned_apps_inner);
+//                 popover_clone.popdown();
+//             });
+
+//             popover.set_child(Some(&unpin_btn));
+//             popover.set_parent(&btn_clone);
+//             popover.popup();
+//         });
+
+//         btn.add_controller(gesture);
+//         container.append(&btn);
+//     }
+
+//     let unpinned_clients: Vec<&HyprClient> = clients
+//         .iter()
+//         .filter(|client| {
+//             !pins.iter().any(|pin| {
+//                 let class_lower = client.class.to_lowercase();
+//                 let pin_cmd = pin.cmd.to_lowercase();
+//                 let pin_name = pin.name.to_lowercase();
+//                 class_lower.contains(&pin_cmd)
+//                     || pin_cmd.contains(&class_lower)
+//                     || class_lower.contains(&pin_name)
+//             })
+//         })
+//         .collect();
+
+//     if !unpinned_clients.is_empty() {
+//         let sep = Separator::new(Orientation::Vertical);
+//         sep.add_css_class("dock-separator");
+//         container.append(&sep);
+
+//         for client in unpinned_clients {
+//             let icon_name = client.class.to_lowercase();
+//             let btn = create_dock_button(&icon_name, &client.title, true);
+
+//             let addr = client.address.clone();
+//             btn.connect_clicked(move |_| {
+//                 let _ = Command::new("hyprctl")
+//                     .args(["dispatch", "focuswindow", &format!("address:{}", addr)])
+//                     .spawn();
+//             });
+
+//             let gesture = GestureClick::new();
+//             gesture.set_button(3);
+//             let pinned_apps_clone = pinned_apps.clone();
+//             let container_clone = container.clone();
+//             let btn_clone = btn.clone();
+//             let client_class = client.class.clone();
+//             let client_title = client.title.clone();
+
+//             gesture.connect_pressed(move |_, _, _, _| {
+//                 let popover = Popover::new();
+//                 let pin_btn = Button::with_label("Vastpinnen aan hyprDock");
+//                 pin_btn.add_css_class("popover-btn");
+
+//                 let pinned_apps_inner = pinned_apps_clone.clone();
+//                 let container_inner = container_clone.clone();
+//                 let popover_clone = popover.clone();
+//                 let c_class = client_class.clone();
+//                 let c_title = client_title.clone();
+
+//                 pin_btn.connect_clicked(move |_| {
+//                     let new_app = DockApp {
+//                         name: c_title.clone(),
+//                         cmd: c_class.to_lowercase(),
+//                         icon: c_class.to_lowercase(),
+//                     };
+//                     pinned_apps_inner.borrow_mut().push(new_app);
+//                     save_pins(&pinned_apps_inner.borrow());
+//                     render_dock_items(&container_inner, &pinned_apps_inner);
+//                     popover_clone.popdown();
+//                 });
+
+//                 popover.set_child(Some(&pin_btn));
+//                 popover.set_parent(&btn_clone);
+//                 popover.popup();
+//             });
+
+//             btn.add_controller(gesture);
+//             container.append(&btn);
+//         }
+//     }
+// }
+
 fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
     while let Some(child) = container.first_child() {
         container.remove(&child);
@@ -309,16 +446,31 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
         let cmd = app_info.cmd.clone();
         let client_address = matching_client.map(|c| c.address.clone());
 
+        // Linker muisklik: Bestaand venster focussen, of nieuw venster openen als hij nog niet draait
+        let addr_click = client_address.clone();
+        let cmd_click = cmd.clone();
         btn.connect_clicked(move |_| {
-            if let Some(ref addr) = client_address {
+            if let Some(ref addr) = addr_click {
                 let _ = Command::new("hyprctl")
                     .args(["dispatch", "focuswindow", &format!("address:{}", addr)])
                     .spawn();
             } else {
-                let _ = Command::new("sh").arg("-c").arg(&cmd).spawn();
+                let _ = Command::new("sh").arg("-c").arg(&cmd_click).spawn();
             }
         });
 
+        // Middle-click: Altijd een NIEUW venster openen van de app
+        let middle_gesture = GestureClick::new();
+        middle_gesture.set_button(2);
+        let cmd_middle = cmd.clone();
+
+        middle_gesture.connect_pressed(move |_, _, _, _| {
+            let _ = Command::new("sh").arg("-c").arg(&cmd_middle).spawn();
+        });
+
+        btn.add_controller(middle_gesture);
+
+        // Rechter muisklik: Ontpinnen popover
         let gesture = GestureClick::new();
         gesture.set_button(3);
         let pinned_apps_clone = pinned_apps.clone();
@@ -373,6 +525,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
             let icon_name = client.class.to_lowercase();
             let btn = create_dock_button(&icon_name, &client.title, true);
 
+            // Linker muisklik: Focussen
             let addr = client.address.clone();
             btn.connect_clicked(move |_| {
                 let _ = Command::new("hyprctl")
@@ -380,12 +533,27 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                     .spawn();
             });
 
+            // Middle-click: Probeer nieuw venster te starten op basis van window class
+            let middle_gesture = GestureClick::new();
+            middle_gesture.set_button(2);
+            let client_class = client.class.clone();
+
+            middle_gesture.connect_pressed(move |_, _, _, _| {
+                let _ = Command::new("sh")
+                    .arg("-c")
+                    .arg(client_class.to_lowercase())
+                    .spawn();
+            });
+
+            btn.add_controller(middle_gesture);
+
+            // Rechter muisklik: Vastpinnen popover
             let gesture = GestureClick::new();
             gesture.set_button(3);
             let pinned_apps_clone = pinned_apps.clone();
             let container_clone = container.clone();
             let btn_clone = btn.clone();
-            let client_class = client.class.clone();
+            let client_class_pin = client.class.clone();
             let client_title = client.title.clone();
 
             gesture.connect_pressed(move |_, _, _, _| {
@@ -396,7 +564,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                 let pinned_apps_inner = pinned_apps_clone.clone();
                 let container_inner = container_clone.clone();
                 let popover_clone = popover.clone();
-                let c_class = client_class.clone();
+                let c_class = client_class_pin.clone();
                 let c_title = client_title.clone();
 
                 pin_btn.connect_clicked(move |_| {
