@@ -7,8 +7,10 @@ use gtk4::{
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::env;
 use std::f64::consts::{FRAC_PI_2, PI};
 use std::fs;
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 use std::rc::Rc;
@@ -42,35 +44,9 @@ enum DockStyle {
     Pill,
 }
 
-// fn main() {
-//     let style = parse_args();
-
-//     let app = Application::builder()
-//         .application_id("com.omarchy.hyprdock")
-//         .build();
-
-//     app.connect_activate(move |app| build_ui(app, style));
-
-//     // BELANGRIJK: Omzeil GTK's eigen argument-parser door een lege array mee te geven!
-//     app.run_with_args(&Vec::<String>::new());
-// }
-
-// fn parse_args() -> DockStyle {
-//     let args: Vec<String> = std::env::args().collect();
-//     for arg in args.iter().skip(1) {
-//         match arg.as_str() {
-//             "--pill" | "-p" | "pill" => return DockStyle::Pill,
-//             "--notch" | "-n" | "notch" => return DockStyle::Notch,
-//             _ => {}
-//         }
-//     }
-//     DockStyle::Notch // Standaard terugvallen op Notch
-// }
-
 fn parse_args() -> DockStyle {
     let args: Vec<String> = std::env::args().collect();
     for arg in args.iter().skip(1) {
-        // Strip eventuele streepjes (- of --) en maak lowercase
         let clean = arg.trim_start_matches('-').to_lowercase();
         match clean.as_str() {
             "pill" | "p" => return DockStyle::Pill,
@@ -78,22 +54,27 @@ fn parse_args() -> DockStyle {
             _ => {}
         }
     }
-    DockStyle::Notch // Standaard
+    DockStyle::Notch
+}
+
+fn restart_dock() {
+    println!("CSS gewijzigd: dock herstarten...");
+    if let Ok(exe) = env::current_exe() {
+        let args: Vec<String> = env::args().collect();
+        // .exec() vervangt het huidige proces direct met behoud van PID en CLI-vlaggen
+        let _ = Command::new(exe).args(&args[1..]).exec();
+    }
 }
 
 fn main() {
-    // 1. Lees onze eigen argumenten uit
     let style = parse_args();
 
-    // 2. Bouw de GTK applicatie
     let app = Application::builder()
         .application_id("com.omarchy.hyprdock")
         .build();
 
     app.connect_activate(move |app| build_ui(app, style));
 
-    // 3. Geef UITSLUITEND de programmanaam door aan GTK!
-    // Zo ziet GTK 'pill' of '--pill' nooit en denkt GLib nooit dat het een bestand is.
     let prog_name = std::env::args()
         .next()
         .unwrap_or_else(|| "hyprdock".to_string());
@@ -196,47 +177,6 @@ fn get_active_workspace_windows() -> Option<i64> {
     json.get("windows")?.as_i64()
 }
 
-// fn build_ui(app: &Application, style: DockStyle) {
-//     if let Some(win) = app.active_window() {
-//         win.present();
-//         return;
-//     }
-//     let window = ApplicationWindow::builder()
-//         .application(app)
-//         .title("hyprDock")
-//         .build();
-
-//     window.init_layer_shell();
-//     window.set_namespace("hyprdock");
-//     window.set_layer(Layer::Top);
-//     window.set_keyboard_mode(KeyboardMode::None);
-//     window.set_anchor(Edge::Bottom, true);
-//     window.set_margin(Edge::Bottom, 0);
-
-//     // VOEG DIT TOE: Dwing GTK om geen minimale breedte vast te houden
-//     window.set_default_size(1, 1);
-
-//     apply_css();
-
-//     let pinned_apps = Rc::new(RefCell::new(load_pins()));
-//     let container = Box::new(Orientation::Horizontal, 8);
-//     container.add_css_class("dock-container");
-
-//     // VOEG DIT TOE: Zorg dat de container niet horizontaal uitrekent
-//     container.set_hexpand(false);
-//     container.set_halign(gtk4::Align::Center);
-
-//     let bg = gtk4::DrawingArea::new();
-//     bg.set_draw_func(move |_area, cr, width, height| match style {
-//         DockStyle::Notch => draw_dock_shape(cr, width as f64, height as f64),
-//         DockStyle::Pill => draw_pill_shape(cr, width as f64, height as f64),
-//     });
-
-//     let overlay = Overlay::new();
-//     overlay.set_child(Some(&bg));
-//     overlay.add_overlay(&container);
-//     overlay.set_measure_overlay(&container, true);
-
 fn build_ui(app: &Application, style: DockStyle) {
     let window = ApplicationWindow::builder()
         .application(app)
@@ -277,7 +217,6 @@ fn build_ui(app: &Application, style: DockStyle) {
     overlay.add_overlay(&container);
     overlay.set_measure_overlay(&container, true);
 
-    // DIT IS DE OPLOSSING: Maak een verticale hoofdbox met een onzichtbare spacer onderaan
     let root_box = Box::new(Orientation::Vertical, 0);
     let spacer = Box::new(Orientation::Vertical, 0);
     spacer.add_css_class("dock-spacer");
@@ -287,7 +226,6 @@ fn build_ui(app: &Application, style: DockStyle) {
     root_box.append(&spacer);
 
     window.set_child(Some(&root_box));
-    // ... rest van je build_ui code ...
 
     let is_hovered = Rc::new(RefCell::new(false));
     let is_menu_open = Rc::new(RefCell::new(false));
@@ -295,7 +233,6 @@ fn build_ui(app: &Application, style: DockStyle) {
 
     render_dock_items(&container, &pinned_apps, &is_menu_open);
     bg.queue_draw();
-    // window.set_child(Some(&overlay));
 
     let motion_controller = EventControllerMotion::new();
     let is_hovered_enter = is_hovered.clone();
@@ -404,43 +341,6 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
     let _ = cr.stroke();
 }
 
-// fn check_and_update_autohide(
-//     window: &ApplicationWindow,
-//     is_hovered: bool,
-//     is_menu_open: bool,
-//     style: DockStyle,
-// ) {
-//     // Stel de zwevende marge in op basis van de stijl
-//     let visible_margin = match style {
-//         DockStyle::Pill => 12, // 12px zweven boven de schermrand (verhoog/verlaag naar wens)
-//         DockStyle::Notch => 0, // Sluit direct aan op de onderkant
-//     };
-
-//     if is_hovered || is_menu_open {
-//         window.set_margin(Edge::Bottom, visible_margin);
-//         return;
-//     }
-
-//     match get_active_workspace_windows() {
-//         Some(windows) if windows > 0 => {
-//             let alloc_height = window.allocated_height();
-
-//             // Als de dock verborgen is, schuiven we hem omlaag.
-//             // Er blijft altijd 2px zichtbaar aan de onderkant van het scherm.
-//             let hidden_margin = if alloc_height > 2 {
-//                 -(alloc_height - 2)
-//             } else {
-//                 -55
-//             };
-
-//             window.set_margin(Edge::Bottom, hidden_margin);
-//         }
-//         _ => {
-//             window.set_margin(Edge::Bottom, visible_margin);
-//         }
-//     }
-// }
-
 fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_menu_open: bool) {
     if is_hovered || is_menu_open {
         window.set_margin(Edge::Bottom, 0);
@@ -451,7 +351,6 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_me
         Some(windows) if windows > 0 => {
             let alloc_height = window.allocated_height();
 
-            // Verberg de dock, houd altijd 2px grijpzone onderaan het scherm
             let hidden_margin = if alloc_height > 2 {
                 -(alloc_height - 2)
             } else {
@@ -498,7 +397,6 @@ fn render_dock_items(
         let cmd = app_info.cmd.clone();
         let first_client_addr = matching_clients.first().map(|c| c.address.clone());
 
-        // Linker muisklik
         let addr_click = first_client_addr.clone();
         let cmd_click = cmd.clone();
         btn.connect_clicked(move |_| {
@@ -511,7 +409,6 @@ fn render_dock_items(
             }
         });
 
-        // Middle-click: Altijd nieuw venster openen
         let middle_gesture = GestureClick::new();
         middle_gesture.set_button(2);
         let cmd_middle = cmd.clone();
@@ -520,7 +417,6 @@ fn render_dock_items(
         });
         btn.add_controller(middle_gesture);
 
-        // Rechter muisklik: Menu
         let gesture = GestureClick::new();
         gesture.set_button(3);
         let pinned_apps_clone = pinned_apps.clone();
@@ -547,7 +443,6 @@ fn render_dock_items(
             let popover_box = Box::new(Orientation::Vertical, 2);
             popover_box.add_css_class("popover-box");
 
-            // 1. Naam van de App
             let header_label = gtk4::Label::new(Some(&app_name_menu));
             header_label.add_css_class("menu-header");
             header_label.set_xalign(0.0);
@@ -557,7 +452,6 @@ fn render_dock_items(
             sep1.add_css_class("popover-separator");
             popover_box.append(&sep1);
 
-            // 2. Unpin optie
             let unpin_box = Box::new(Orientation::Horizontal, 0);
             unpin_box.add_css_class("menu-item-row");
             let unpin_label = gtk4::Label::new(Some("Unpin from dock"));
@@ -579,7 +473,6 @@ fn render_dock_items(
             unpin_box.add_controller(click_unpin);
             popover_box.append(&unpin_box);
 
-            // 3. Lijst van actieve vensters
             if !matching_clients.is_empty() {
                 let sep2 = Separator::new(Orientation::Horizontal);
                 sep2.add_css_class("popover-separator");
@@ -625,7 +518,6 @@ fn render_dock_items(
                     item_box.add_controller(click_win);
                     item_box.append(&win_label);
 
-                    // Kruisje (✕)
                     let close_label = gtk4::Label::new(Some("✕"));
                     close_label.add_css_class("close-btn-label");
                     let addr_close = client.address.clone();
@@ -648,7 +540,6 @@ fn render_dock_items(
                     popover_box.append(&item_box);
                 }
 
-                // 4. Plusknop (+)
                 let add_box = Box::new(Orientation::Horizontal, 0);
                 add_box.add_css_class("menu-item-row");
                 let add_label = gtk4::Label::new(Some("+"));
@@ -676,7 +567,6 @@ fn render_dock_items(
         container.append(&btn);
     }
 
-    // Ongepinde geopende vensters
     let unpinned_clients: Vec<&HyprClient> = clients
         .iter()
         .filter(|client| {
@@ -889,11 +779,6 @@ fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Butto
     };
 
     let image = gtk4::Image::from_icon_name(&valid_icon);
-
-    // VERWIJDER OF COMMENTEER DEZE REGEL:
-    // image.set_pixel_size(40);
-
-    // VOEG DEZE REGEL TOE:
     image.add_css_class("dock-icon");
 
     item_box.append(&image);
@@ -914,115 +799,115 @@ fn apply_css() {
     let css_path = get_css_path();
 
     let default_css = r#"
-window {
-    background-color: transparent;
-}
+        /*
+        BASE SHARED SETTINGS ##################################################################################
+        */
+        window {
+            background-color: transparent;
+            padding-top: 20px;
+        }
 
-.dock-container {
-    background-color: transparent;
-    padding: 6px 16px;
-    margin: 6px;
-}
+        .dock-container {
+            background-color: transparent;
+            background-image: none;
+            border: none;
+            box-shadow: none;
+        }
 
-.dock-button {
-    background-color: transparent;
-    border: none;
-    border-radius: 14px;
-    padding: 4px;
-    min-width: 44px;
-    min-height: 44px;
-    transition: background-color 150ms ease;
-}
+        /*
+        BASE STYLING SETTINGS ########################################################################################
+        */
+        .dock-button {
+            background-color: transparent;
+            background-image: none;
+            border: none;
+            box-shadow: none;
+            border-radius: 14px;
+            padding: 5px 5px 7px 5px;
+            transform-origin: bottom center;
+            transition: transform 50ms cubic-bezier(0.2, 0, 0.2, 1);
+        }
 
-.dock-button:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-}
+        .dock-button:hover {
+            background-color: transparent;
+            transform: scale(1.4);
+        }
 
-.dock-button:active {
-    background-color: rgba(255, 255, 255, 0.20);
-}
+        .dock-button:active,
+        .dock-button:checked {
+            background-color: transparent;
+        }
 
-.running-dot {
-    min-width: 5px;
-    min-height: 5px;
-    border-radius: 5px;
-    background-color: #ffffff;
-    margin-top: 2px;
-}
+        .dock-icon {
+            -gtk-icon-size: 52px;
+            min-width: 32px;
+            min-height: 32px;
+        }
 
-.dock-separator {
-    min-width: 1px;
-    background-color: rgba(255, 255, 255, 0.17);
-    margin: 6px 4px;
-}
+        .running-dot {
+            min-width: 2px;
+            min-height: 2px;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.53);
+            margin-top: 1px;
+            margin-bottom: -2px;
+            margin-left: 12px;
+            margin-right: 12px;
+        }
 
-popover contents {
-    background-color: #1c1c24;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
-    padding: 4px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-}
+        .dock-separator {
+            min-width: 2px;
+            background-color: rgba(255, 255, 255, 0.17);
+            margin: 6px 4px;
+        }
 
-.popover-box {
-    padding: 2px;
-}
+        /*
+        RIGHT CLICK CONTEXT MENU ####################################################################################################
+        */
+        .popover-btn {
+            padding: 6px 12px;
+        }
 
-.menu-header {
-    color: #8a8a9e;
-    font-size: 11px;
-    font-weight: bold;
-    padding: 4px 8px;
-    text-transform: uppercase;
-}
+        popover contents {
+            background-color: rgba(2, 6, 12, 0.75);
+            border: 2px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
 
-.menu-item-row {
-    padding: 6px 8px;
-    border-radius: 6px;
-    color: #e0e0e0;
-    transition: background-color 100ms ease;
-}
+        /*
+        MacOS DOCK STYLING  (pill / --pill / -p) ####################################################################################
+        */
+        .style-pill.dock-container {
+            padding: 8px 16px;
+            margin: 0px 4px;
+        }
 
-.menu-item-row:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-}
+        .style-pill.dock-spacer {
+            min-height: 16px;
+        }
 
-.popover-separator {
-    background-color: rgba(255, 255, 255, 0.1);
-    margin: 4px 0;
-    min-height: 1px;
-}
+        /*
+        NOTCH DOCK STYLING (notch / --notch / -n)
+        */
+        .style-notch.dock-container {
+            padding: 4px 14px 2px 14px;
+            margin: 0px 4px;
+        }
 
-.win-label {
-    font-family: monospace;
-    font-size: 12px;
-    color: #d0d0d8;
-}
-
-.close-btn-label {
-    color: #ff5555;
-    font-weight: bold;
-    padding: 0 4px;
-    border-radius: 4px;
-}
-
-.close-btn-label:hover {
-    background-color: rgba(255, 85, 85, 0.25);
-    color: #ff3333;
-}
-
-.add-label {
-    font-size: 14px;
-    font-weight: bold;
-    color: #a0a0b0;
-}
-"#;
+        .style-notch.dock-spacer {
+            min-height: 0px;
+        }
+    "#;
 
     if !css_path.exists() {
         let _ = fs::write(&css_path, default_css);
     }
 
-    provider.load_from_path(&css_path);
+    if let Ok(content) = fs::read_to_string(&css_path) {
+        if !content.trim().is_empty() {
+            provider.load_from_data(&content);
+        }
+    }
 
     if let Some(display) = gtk4::gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
@@ -1035,16 +920,18 @@ popover contents {
     let mut last_modified: Option<SystemTime> =
         fs::metadata(&css_path).and_then(|m| m.modified()).ok();
 
-    let provider_clone = provider.clone();
     let css_path_clone = css_path.clone();
 
-    glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+    // Monitor het CSS bestand elke 500ms. Bij wijziging voert het een process replacement uit.
+    glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
         if let Ok(metadata) = fs::metadata(&css_path_clone) {
             if let Ok(modified) = metadata.modified() {
-                if last_modified != Some(modified) {
+                if last_modified.is_none() {
                     last_modified = Some(modified);
-                    provider_clone.load_from_path(&css_path_clone);
-                    println!("css reloaded");
+                } else if last_modified != Some(modified) {
+                    if metadata.len() > 0 {
+                        restart_dock();
+                    }
                 }
             }
         }
