@@ -404,43 +404,6 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
     let _ = cr.stroke();
 }
 
-// fn check_and_update_autohide(
-//     window: &ApplicationWindow,
-//     is_hovered: bool,
-//     is_menu_open: bool,
-//     style: DockStyle,
-// ) {
-//     // Stel de zwevende marge in op basis van de stijl
-//     let visible_margin = match style {
-//         DockStyle::Pill => 12, // 12px zweven boven de schermrand (verhoog/verlaag naar wens)
-//         DockStyle::Notch => 0, // Sluit direct aan op de onderkant
-//     };
-
-//     if is_hovered || is_menu_open {
-//         window.set_margin(Edge::Bottom, visible_margin);
-//         return;
-//     }
-
-//     match get_active_workspace_windows() {
-//         Some(windows) if windows > 0 => {
-//             let alloc_height = window.allocated_height();
-
-//             // Als de dock verborgen is, schuiven we hem omlaag.
-//             // Er blijft altijd 2px zichtbaar aan de onderkant van het scherm.
-//             let hidden_margin = if alloc_height > 2 {
-//                 -(alloc_height - 2)
-//             } else {
-//                 -55
-//             };
-
-//             window.set_margin(Edge::Bottom, hidden_margin);
-//         }
-//         _ => {
-//             window.set_margin(Edge::Bottom, visible_margin);
-//         }
-//     }
-// }
-
 fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool, is_menu_open: bool) {
     if is_hovered || is_menu_open {
         window.set_margin(Edge::Bottom, 0);
@@ -914,108 +877,136 @@ fn apply_css() {
     let css_path = get_css_path();
 
     let default_css = r#"
-window {
-    background-color: transparent;
-}
+        /*
+        BASE SHARED SETTINGS ##################################################################################
+        */
 
-.dock-container {
-    background-color: transparent;
-    padding: 6px 16px;
-    margin: 6px;
-}
+        /* window size */
+        window {
+            background-color: transparent;
+            padding-top: 20px;
+        }
 
-.dock-button {
-    background-color: transparent;
-    border: none;
-    border-radius: 14px;
-    padding: 4px;
-    min-width: 44px;
-    min-height: 44px;
-    transition: background-color 150ms ease;
-}
+        /* GTK standard resets */
+        .dock-container {
+            background-color: transparent;
+            background-image: none;
+            border: none;
+            box-shadow: none;
+        }
 
-.dock-button:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-}
+        /*
+        BASE STYLING SETTINGS ########################################################################################
+        */
 
-.dock-button:active {
-    background-color: rgba(255, 255, 255, 0.20);
-}
+        .dock-button {
+            background-color: transparent;
+            background-image: none;
+            border: none;
+            box-shadow: none;
+            border-radius: 14px;
+            padding: 5px 5px 7px 5px;
+            transform-origin: bottom center;
+            transition: transform 50ms cubic-bezier(0.2, 0, 0.2, 1);
+        }
 
-.running-dot {
-    min-width: 5px;
-    min-height: 5px;
-    border-radius: 5px;
-    background-color: #ffffff;
-    margin-top: 2px;
-}
+        /* MacOS style growing, not that smooth tho */
+        .dock-button:hover {
+            background-color: transparent;
+            transform: scale(1.4);
+        }
 
-.dock-separator {
-    min-width: 1px;
-    background-color: rgba(255, 255, 255, 0.17);
-    margin: 6px 4px;
-}
+        /* no active background */
+        .dock-button:active,
+        .dock-button:checked {
+            background-color: transparent;
+        }
+        /* app icons (can be used per style as well)*/
 
-popover contents {
-    background-color: #1c1c24;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
-    padding: 4px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-}
+        .dock-icon {
+            -gtk-icon-size: 52px;
+            min-width: 32px;
+            min-height: 32px;
+        }
 
-.popover-box {
-    padding: 2px;
-}
+        /* running indicator */
+        .running-dot {
+            min-width: 2px;
+            min-height: 2px;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.53);
+            margin-top: 1px;
+            margin-bottom: -2px;
+            margin-left: 12px;
+            margin-right: 12px;
+        }
 
-.menu-header {
-    color: #8a8a9e;
-    font-size: 11px;
-    font-weight: bold;
-    padding: 4px 8px;
-    text-transform: uppercase;
-}
+        /* separator between pinned (running or not) and unpinned running apps */
+        .dock-separator {
+            min-width: 2px;
+            background-color: rgba(255, 255, 255, 0.17);
+            margin: 6px 4px;
+        }
 
-.menu-item-row {
-    padding: 6px 8px;
-    border-radius: 6px;
-    color: #e0e0e0;
-    transition: background-color 100ms ease;
-}
+        /*
+        RIGHT CLICK CONTEXT MENU ####################################################################################################
+        */
 
-.menu-item-row:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-}
+        .popover-btn {
+            padding: 6px 12px;
+        }
 
-.popover-separator {
-    background-color: rgba(255, 255, 255, 0.1);
-    margin: 4px 0;
-    min-height: 1px;
-}
+        /* doesn't want to blur :((( */
+        popover contents {
+            background-color: rgba(2, 6, 12, 0.75);
+            border: 2px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
 
-.win-label {
-    font-family: monospace;
-    font-size: 12px;
-    color: #d0d0d8;
-}
+        /*
+        MacOS DOCK STYLING  (pill / --pill / -p) ####################################################################################
+        */
 
-.close-btn-label {
-    color: #ff5555;
-    font-weight: bold;
-    padding: 0 4px;
-    border-radius: 4px;
-}
+        /* app icon padding */
+        .style-pill.dock-container {
+            padding: 8px 16px;
+            margin: 0px 4px;
+        }
 
-.close-btn-label:hover {
-    background-color: rgba(255, 85, 85, 0.25);
-    color: #ff3333;
-}
+        /* floating pill bar (deadzone at the bottom) */
+        .style-pill.dock-spacer {
+            min-height: 16px;
+        }
 
-.add-label {
-    font-size: 14px;
-    font-weight: bold;
-    color: #a0a0b0;
-}
+        /* app icon size */
+        /*
+        .style-pill .dock-icon {
+            -gtk-icon-size: 48px;
+        }
+        */
+
+        /*
+        NOTCH DOCK STYLING (notch / --notch / -n)
+        */
+
+        /* padding */
+        .style-notch.dock-container {
+            padding: 4px 14px 2px 14px;
+            margin: 0px 4px;
+        }
+
+        /* app icon size */
+        /*
+        .style-notch .dock-icon {
+            -gtk-icon-size: 48px;
+        }
+        */
+
+        /* no float space needed */
+        .style-notch.dock-spacer {
+            min-height: 0px;
+        }
+
 "#;
 
     if !css_path.exists() {
