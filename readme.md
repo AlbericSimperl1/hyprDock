@@ -5,13 +5,14 @@ Style editing implements live editing. There could be issues with the activation
 
 ## Functionalities
 
-- (un)pinning apps to the dock
-- jumping to open windows
-- opening new windows
-- closing windows
-- dynamic resizing
+- (Un)Pinning apps to the dock
+- Jumping to open windows
+- Opening new windows
+- Closing windows
+- Dynamic resizing
+- MacOS style dock
+- Notch style dock
 
 ## possible extensions
 
-- notched and pill shaped bars
 - different bar positions
