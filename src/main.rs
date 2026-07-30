@@ -295,7 +295,7 @@ fn build_ui(app: &Application, style: DockStyle) {
 
     render_dock_items(&container, &pinned_apps, &is_menu_open);
     bg.queue_draw();
-    window.set_child(Some(&overlay));
+    // window.set_child(Some(&overlay));
 
     let motion_controller = EventControllerMotion::new();
     let is_hovered_enter = is_hovered.clone();
