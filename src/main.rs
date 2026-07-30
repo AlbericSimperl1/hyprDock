@@ -12,6 +12,14 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::rc::Rc;
+use std::time::SystemTime;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+struct DockApp {
+    name: String,
+    cmd: String,
+    icon: String,
+}
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 struct HyprWorkspaceInfo {
@@ -28,14 +36,6 @@ struct HyprClient {
     workspace: Option<HyprWorkspaceInfo>,
 }
 
-fn get_config_path() -> PathBuf {
-    let mut path = glib::user_config_dir();
-    path.push("hyprDock");
-    fs::create_dir_all(&path).ok();
-    path.push("pins.json");
-    path
-}
-
 fn truncate_text(text: &str, max_len: usize) -> String {
     if text.chars().count() > max_len {
         let truncated: String = text.chars().take(max_len - 3).collect();
@@ -43,6 +43,14 @@ fn truncate_text(text: &str, max_len: usize) -> String {
     } else {
         text.to_string()
     }
+}
+
+fn get_config_path() -> PathBuf {
+    let mut path = glib::user_config_dir();
+    path.push("hyprDock");
+    fs::create_dir_all(&path).ok();
+    path.push("pins.json");
+    path
 }
 
 fn get_css_path() -> PathBuf {
@@ -234,12 +242,10 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
         cr.curve_to(cp1x, cp1y, cp2x, cp2y, ex, ey);
     };
 
-    // Helper om het pad van de dock op te bouwen
     let construct_path = || {
         cr.new_path();
         cr.move_to(width, height);
 
-        // bottom-right flare
         quad(
             cr,
             width,
@@ -252,27 +258,22 @@ fn draw_dock_shape(cr: &gtk4::cairo::Context, width: f64, height: f64) {
 
         cr.line_to(width - nd, corner);
 
-        // top-right rounded corner
         cr.arc_negative(width - nd - corner, corner, corner, 0.0, -FRAC_PI_2);
 
         cr.line_to(nd + corner, 0.0);
 
-        // top-left rounded corner
         cr.arc_negative(nd + corner, corner, corner, -FRAC_PI_2, -PI);
 
         cr.line_to(nd, height - nd);
 
-        // bottom-left flare
         quad(cr, nd, height - nd, nd, height, 0.0, height);
     };
 
-    // 1. Vulling: wel sluiten zodat de achtergrondkleur tot de onderrand doorloopt
     construct_path();
     cr.close_path();
     cr.set_source_rgba(17.0 / 255.0, 17.0 / 255.0, 23.0 / 255.0, 0.55);
     let _ = cr.fill();
 
-    // 2. Rand: NIET sluiten, zodat enkel de flares, zijkanten en bovenkant gestroked worden
     construct_path();
     cr.set_source_rgba(1.0, 1.0, 1.0, 0.17);
     cr.set_line_width(3.0);
@@ -294,275 +295,6 @@ fn check_and_update_autohide(window: &ApplicationWindow, is_hovered: bool) {
         }
     }
 }
-
-// fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
-//     while let Some(child) = container.first_child() {
-//         container.remove(&child);
-//     }
-
-//     let pins = pinned_apps.borrow().clone();
-//     let clients = get_running_clients();
-
-//     for (index, app_info) in pins.iter().enumerate() {
-//         // Zoek alle geopende vensters die bij deze gepinde app horen
-//         let matching_clients: Vec<HyprClient> = clients
-//             .iter()
-//             .filter(|c| {
-//                 let class_lower = c.class.to_lowercase();
-//                 let app_cmd = app_info.cmd.to_lowercase();
-//                 let app_name = app_info.name.to_lowercase();
-//                 class_lower.contains(&app_cmd)
-//                     || app_cmd.contains(&class_lower)
-//                     || class_lower.contains(&app_name)
-//             })
-//             .cloned()
-//             .collect();
-
-//         let is_running = !matching_clients.is_empty();
-//         let btn = create_dock_button(&app_info.icon, &app_info.name, is_running);
-
-//         let cmd = app_info.cmd.clone();
-//         let first_client_addr = matching_clients.first().map(|c| c.address.clone());
-
-//         // Linker muisklik: Focussen of starten
-//         let addr_click = first_client_addr.clone();
-//         let cmd_click = cmd.clone();
-//         btn.connect_clicked(move |_| {
-//             if let Some(ref addr) = addr_click {
-//                 let _ = Command::new("hyprctl")
-//                     .args(["dispatch", "focuswindow", &format!("address:{}", addr)])
-//                     .spawn();
-//             } else {
-//                 let _ = Command::new("sh").arg("-c").arg(&cmd_click).spawn();
-//             }
-//         });
-
-//         // Middle-click: Altijd nieuw venster openen
-//         let middle_gesture = GestureClick::new();
-//         middle_gesture.set_button(2);
-//         let cmd_middle = cmd.clone();
-//         middle_gesture.connect_pressed(move |_, _, _, _| {
-//             let _ = Command::new("sh").arg("-c").arg(&cmd_middle).spawn();
-//         });
-//         btn.add_controller(middle_gesture);
-
-//         // Rechter muisklik: Uitgebreid menu
-//         let gesture = GestureClick::new();
-//         gesture.set_button(3);
-//         let pinned_apps_clone = pinned_apps.clone();
-//         let container_clone = container.clone();
-//         let btn_clone = btn.clone();
-//         let app_cmd_menu = app_info.cmd.clone();
-
-//         gesture.connect_pressed(move |_, _, _, _| {
-//             let popover = Popover::new();
-//             let popover_box = Box::new(Orientation::Vertical, 4);
-
-//             // 1. Unpin Knop
-//             let unpin_btn = Button::with_label("Ontpinnen van hyprDock");
-//             unpin_btn.add_css_class("popover-btn");
-
-//             let pinned_apps_inner = pinned_apps_clone.clone();
-//             let container_inner = container_clone.clone();
-//             let popover_clone = popover.clone();
-
-//             unpin_btn.connect_clicked(move |_| {
-//                 pinned_apps_inner.borrow_mut().remove(index);
-//                 save_pins(&pinned_apps_inner.borrow());
-//                 render_dock_items(&container_inner, &pinned_apps_inner);
-//                 popover_clone.popdown();
-//             });
-//             popover_box.append(&unpin_btn);
-
-//             // 2. Lijst van actieve vensters van deze app
-//             if !matching_clients.is_empty() {
-//                 let sep = Separator::new(Orientation::Horizontal);
-//                 popover_box.append(&sep);
-
-//                 for client in &matching_clients {
-//                     let item_box = Box::new(Orientation::Horizontal, 6);
-
-//                     // Venster titel / knop om te focussen
-//                     let display_title = if client.title.is_empty() {
-//                         "Venster".to_string()
-//                     } else {
-//                         client.title.clone()
-//                     };
-
-//                     let win_btn = Button::with_label(&display_title);
-//                     win_btn.add_css_class("popover-btn");
-//                     win_btn.set_hexpand(true);
-
-//                     let addr_focus = client.address.clone();
-//                     let popover_focus = popover.clone();
-//                     win_btn.connect_clicked(move |_| {
-//                         let _ = Command::new("hyprctl")
-//                             .args([
-//                                 "dispatch",
-//                                 "focuswindow",
-//                                 &format!("address:{}", addr_focus),
-//                             ])
-//                             .spawn();
-//                         popover_focus.popdown();
-//                     });
-
-//                     // Kruisje (✕) om het specifieke venster te sluiten
-//                     let close_btn = Button::with_label("✕");
-//                     close_btn.add_css_class("popover-btn");
-
-//                     let addr_close = client.address.clone();
-//                     let popover_close = popover.clone();
-//                     close_btn.connect_clicked(move |_| {
-//                         let _ = Command::new("hyprctl")
-//                             .args([
-//                                 "dispatch",
-//                                 "closewindow",
-//                                 &format!("address:{}", addr_close),
-//                             ])
-//                             .spawn();
-//                         popover_close.popdown();
-//                     });
-
-//                     item_box.append(&win_btn);
-//                     item_box.append(&close_btn);
-//                     popover_box.append(&item_box);
-//                 }
-
-//                 // 3. Plusknop (+) voor een nieuw venster
-//                 let add_btn = Button::with_label("+ Nieuw Venster");
-//                 add_btn.add_css_class("popover-btn");
-//                 let cmd_add = app_cmd_menu.clone();
-//                 let popover_add = popover.clone();
-
-//                 add_btn.connect_clicked(move |_| {
-//                     let _ = Command::new("sh").arg("-c").arg(&cmd_add).spawn();
-//                     popover_add.popdown();
-//                 });
-
-//                 popover_box.append(&add_btn);
-//             }
-
-//             popover.set_child(Some(&popover_box));
-//             popover.set_parent(&btn_clone);
-//             popover.popup();
-//         });
-
-//         btn.add_controller(gesture);
-//         container.append(&btn);
-//     }
-
-//     // Ongepinde geopende vensters (rechterkant van de separator)
-//     let unpinned_clients: Vec<&HyprClient> = clients
-//         .iter()
-//         .filter(|client| {
-//             !pins.iter().any(|pin| {
-//                 let class_lower = client.class.to_lowercase();
-//                 let pin_cmd = pin.cmd.to_lowercase();
-//                 let pin_name = pin.name.to_lowercase();
-//                 class_lower.contains(&pin_cmd)
-//                     || pin_cmd.contains(&class_lower)
-//                     || class_lower.contains(&pin_name)
-//             })
-//         })
-//         .collect();
-
-//     if !unpinned_clients.is_empty() {
-//         let sep = Separator::new(Orientation::Vertical);
-//         sep.add_css_class("dock-separator");
-//         container.append(&sep);
-
-//         for client in unpinned_clients {
-//             let icon_name = client.class.to_lowercase();
-//             let btn = create_dock_button(&icon_name, &client.title, true);
-
-//             // Linker muisklik: Focussen
-//             let addr = client.address.clone();
-//             btn.connect_clicked(move |_| {
-//                 let _ = Command::new("hyprctl")
-//                     .args(["dispatch", "focuswindow", &format!("address:{}", addr)])
-//                     .spawn();
-//             });
-
-//             // Middle-click: Nieuw exemplaar starten
-//             let middle_gesture = GestureClick::new();
-//             middle_gesture.set_button(2);
-//             let client_class_mid = client.class.clone();
-//             middle_gesture.connect_pressed(move |_, _, _, _| {
-//                 let _ = Command::new("sh")
-//                     .arg("-c")
-//                     .arg(client_class_mid.to_lowercase())
-//                     .spawn();
-//             });
-//             btn.add_controller(middle_gesture);
-
-//             // Rechter muisklik: Vastpinnen + Venster opties
-//             let gesture = GestureClick::new();
-//             gesture.set_button(3);
-//             let pinned_apps_clone = pinned_apps.clone();
-//             let container_clone = container.clone();
-//             let btn_clone = btn.clone();
-//             let client_class = client.class.clone();
-//             let client_title = client.title.clone();
-//             let client_address = client.address.clone();
-
-//             gesture.connect_pressed(move |_, _, _, _| {
-//                 let popover = Popover::new();
-//                 let popover_box = Box::new(Orientation::Vertical, 4);
-
-//                 // Pin knop
-//                 let pin_btn = Button::with_label("Vastpinnen aan hyprDock");
-//                 pin_btn.add_css_class("popover-btn");
-
-//                 let pinned_apps_inner = pinned_apps_clone.clone();
-//                 let container_inner = container_clone.clone();
-//                 let popover_clone = popover.clone();
-//                 let c_class = client_class.clone();
-//                 let c_title = client_title.clone();
-
-//                 pin_btn.connect_clicked(move |_| {
-//                     let new_app = DockApp {
-//                         name: c_title.clone(),
-//                         cmd: c_class.to_lowercase(),
-//                         icon: c_class.to_lowercase(),
-//                     };
-//                     pinned_apps_inner.borrow_mut().push(new_app);
-//                     save_pins(&pinned_apps_inner.borrow());
-//                     render_dock_items(&container_inner, &pinned_apps_inner);
-//                     popover_clone.popdown();
-//                 });
-//                 popover_box.append(&pin_btn);
-
-//                 let sep = Separator::new(Orientation::Horizontal);
-//                 popover_box.append(&sep);
-
-//                 // Sluitknop voor dit specifieke venster
-//                 let close_btn = Button::with_label("Sluit venster ✕");
-//                 close_btn.add_css_class("popover-btn");
-//                 let addr_close = client_address.clone();
-//                 let popover_close = popover.clone();
-
-//                 close_btn.connect_clicked(move |_| {
-//                     let _ = Command::new("hyprctl")
-//                         .args([
-//                             "dispatch",
-//                             "closewindow",
-//                             &format!("address:{}", addr_close),
-//                         ])
-//                         .spawn();
-//                     popover_close.popdown();
-//                 });
-//                 popover_box.append(&close_btn);
-
-//                 popover.set_child(Some(&popover_box));
-//                 popover.set_parent(&btn_clone);
-//                 popover.popup();
-//             });
-
-//             btn.add_controller(gesture);
-//             container.append(&btn);
-//         }
-//     }
-// }
 
 fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
     while let Some(child) = container.first_child() {
@@ -592,7 +324,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
         let cmd = app_info.cmd.clone();
         let first_client_addr = matching_clients.first().map(|c| c.address.clone());
 
-        // Linker muisklik: Focus op venster of start app
+        // Linker muisklik
         let addr_click = first_client_addr.clone();
         let cmd_click = cmd.clone();
         btn.connect_clicked(move |_| {
@@ -605,7 +337,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
             }
         });
 
-        // Middle-click: Open altijd nieuw venster
+        // Middle-click: Nieuw venster
         let middle_gesture = GestureClick::new();
         middle_gesture.set_button(2);
         let cmd_middle = cmd.clone();
@@ -625,7 +357,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
 
         gesture.connect_pressed(move |_, _, _, _| {
             let popover = Popover::new();
-            popover.set_has_arrow(false); // Verwijder het pijltje/de tekstballon-punt!
+            popover.set_has_arrow(false);
 
             let popover_box = Box::new(Orientation::Vertical, 2);
             popover_box.add_css_class("popover-box");
@@ -684,7 +416,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                     };
 
                     let full_text = format!("{}: {}", ws_str, title_text);
-                    let truncated = truncate_text(&full_text, 35);
+                    let truncated = truncate_text(&full_text, 25);
 
                     let win_label = gtk4::Label::new(Some(&truncated));
                     win_label.set_xalign(0.0);
@@ -758,7 +490,7 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
         container.append(&btn);
     }
 
-    // Ongepinde geopende vensters (rechterkant van separator)
+    // Ongepinde geopende vensters
     let unpinned_clients: Vec<&HyprClient> = clients
         .iter()
         .filter(|client| {
@@ -782,7 +514,6 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
             let icon_name = client.class.to_lowercase();
             let btn = create_dock_button(&icon_name, &client.title, true);
 
-            // Linker muisklik
             let addr = client.address.clone();
             btn.connect_clicked(move |_| {
                 let _ = Command::new("hyprctl")
@@ -790,7 +521,6 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                     .spawn();
             });
 
-            // Middle-click
             let middle_gesture = GestureClick::new();
             middle_gesture.set_button(2);
             let client_class_mid = client.class.clone();
@@ -802,7 +532,6 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
             });
             btn.add_controller(middle_gesture);
 
-            // Rechter muisklik
             let gesture = GestureClick::new();
             gesture.set_button(3);
             let pinned_apps_clone = pinned_apps.clone();
@@ -824,7 +553,6 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                 let popover_box = Box::new(Orientation::Vertical, 2);
                 popover_box.add_css_class("popover-box");
 
-                // Header
                 let header_label = gtk4::Label::new(Some(&client_class));
                 header_label.add_css_class("menu-header");
                 header_label.set_xalign(0.0);
@@ -834,7 +562,6 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                 sep1.add_css_class("popover-separator");
                 popover_box.append(&sep1);
 
-                // Pin optie
                 let pin_box = Box::new(Orientation::Horizontal, 0);
                 pin_box.add_css_class("menu-item-row");
                 let pin_label = gtk4::Label::new(Some("Pin to dock"));
@@ -867,12 +594,11 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
                 sep2.add_css_class("popover-separator");
                 popover_box.append(&sep2);
 
-                // Venster regel
                 let item_box = Box::new(Orientation::Horizontal, 8);
                 item_box.add_css_class("menu-item-row");
 
                 let full_text = format!("{}: {}", client_ws_str, client_title);
-                let truncated = truncate_text(&full_text, 35);
+                let truncated = truncate_text(&full_text, 25);
 
                 let win_label = gtk4::Label::new(Some(&truncated));
                 win_label.set_xalign(0.0);
@@ -916,7 +642,6 @@ fn render_dock_items(container: &Box, pinned_apps: &Rc<RefCell<Vec<DockApp>>>) {
 
                 popover_box.append(&item_box);
 
-                // Plusknop (+)
                 let add_box = Box::new(Orientation::Horizontal, 0);
                 add_box.add_css_class("menu-item-row");
                 let add_label = gtk4::Label::new(Some("+"));
@@ -980,59 +705,9 @@ fn create_dock_button(icon_name: &str, tooltip: &str, is_running: bool) -> Butto
     btn
 }
 
-use std::time::SystemTime;
-
 fn apply_css() {
     let provider = CssProvider::new();
     let css_path = get_css_path();
-
-    //     let default_css = r#"
-    // window {
-    //     background-color: transparent;
-    // }
-
-    // .dock-container {
-    //     background-color: transparent;
-    //     padding: 6px 16px;
-    //     margin: 6px;
-    // }
-
-    // .dock-button {
-    //     background-color: transparent;
-    //     border: none;
-    //     border-radius: 14px;
-    //     padding: 4px;
-    //     min-width: 44px;
-    //     min-height: 44px;
-    //     transition: background-color 150ms ease;
-    // }
-
-    // .dock-button:hover {
-    //     background-color: rgba(255, 255, 255, 0.12);
-    // }
-
-    // .dock-button:active {
-    //     background-color: rgba(255, 255, 255, 0.20);
-    // }
-
-    // .running-dot {
-    //     min-width: 5px;
-    //     min-height: 5px;
-    //     border-radius: 5px;
-    //     background-color: #ffffff;
-    //     margin-top: 2px;
-    // }
-
-    // .dock-separator {
-    //     min-width: 1px;
-    //     background-color: rgba(255, 255, 255, 0.17);
-    //     margin: 6px 4px;
-    // }
-
-    // .popover-btn {
-    //     padding: 6px 12px;
-    // }
-    // "#;
 
     let default_css = r#"
 window {
@@ -1077,7 +752,6 @@ window {
     margin: 6px 4px;
 }
 
-/* --- Popover Context Menu (macOS style) --- */
 popover contents {
     background-color: #1c1c24;
     border: 1px solid rgba(255, 255, 255, 0.12);
