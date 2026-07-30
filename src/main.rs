@@ -999,6 +999,35 @@ fn main() {
     app.run();
 }
 
+// fn build_ui(app: &Application) {
+//     let window = ApplicationWindow::builder()
+//         .application(app)
+//         .title("hyprDock")
+//         .build();
+
+//     window.init_layer_shell();
+//     window.set_namespace("hyprdock");
+//     window.set_layer(Layer::Top);
+//     window.set_keyboard_mode(KeyboardMode::None);
+//     window.set_anchor(Edge::Bottom, true);
+//     window.set_margin(Edge::Bottom, 0);
+
+//     apply_css();
+
+//     let pinned_apps = Rc::new(RefCell::new(load_pins()));
+//     let container = Box::new(Orientation::Horizontal, 8);
+//     container.add_css_class("dock-container");
+
+//     let bg = gtk4::DrawingArea::new();
+//     bg.set_draw_func(|_area, cr, width, height| {
+//         draw_dock_shape(cr, width as f64, height as f64);
+//     });
+
+//     let overlay = Overlay::new();
+//     overlay.set_child(Some(&bg));
+//     overlay.add_overlay(&container);
+//     overlay.set_measure_overlay(&container, true);
+
 fn build_ui(app: &Application) {
     let window = ApplicationWindow::builder()
         .application(app)
@@ -1012,11 +1041,18 @@ fn build_ui(app: &Application) {
     window.set_anchor(Edge::Bottom, true);
     window.set_margin(Edge::Bottom, 0);
 
+    // VOEG DIT TOE: Dwing GTK om geen minimale breedte vast te houden
+    window.set_default_size(1, 1);
+
     apply_css();
 
     let pinned_apps = Rc::new(RefCell::new(load_pins()));
     let container = Box::new(Orientation::Horizontal, 8);
     container.add_css_class("dock-container");
+
+    // VOEG DIT TOE: Zorg dat de container niet horizontaal uitrekent
+    container.set_hexpand(false);
+    container.set_halign(gtk4::Align::Center);
 
     let bg = gtk4::DrawingArea::new();
     bg.set_draw_func(|_area, cr, width, height| {
@@ -1027,6 +1063,8 @@ fn build_ui(app: &Application) {
     overlay.set_child(Some(&bg));
     overlay.add_overlay(&container);
     overlay.set_measure_overlay(&container, true);
+
+    // ... rest van je build_ui code ...
 
     let is_hovered = Rc::new(RefCell::new(false));
     let is_menu_open = Rc::new(RefCell::new(false));
